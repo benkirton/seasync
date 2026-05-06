@@ -5,6 +5,7 @@ import Server from "./server";
 import { DEFAULT_SETTINGS, type SeafileSettings } from "./settings";
 import { SyncController } from "./sync/controller";
 import { Explorer } from "./ui/explorer";
+import PasswordModal from "./ui/password_modal";
 import { SeafileSettingTab } from "./ui/setting_tab";
 import { disableDebugConsole } from "./utils";
 
@@ -81,6 +82,13 @@ export default class SeafilePlugin extends Plugin {
 		this.settings.enableSync = true;
 		await this.saveSettings();
 		if (this.sync.status.type !== "stop") return;
+
+		const ok = await this.ensureUnlocked();
+		if (!ok) {
+			new Notice("Sync not started: encrypted repository is locked.");
+			return;
+		}
+
 		await this.sync.init();
 		this.sync.startSync();
 	}
@@ -91,6 +99,33 @@ export default class SeafilePlugin extends Plugin {
 			return true;
 		}
 		return false;
+	}
+
+	// Resolves true once the repo is ready to sync (plain repo, or encrypted-and-unlocked).
+	// Resolves false if the user cancelled the password prompt.
+	async ensureUnlocked(): Promise<boolean> {
+		if (!this.settings.encrypted) return true;
+		if (this.server.crypto) return true;
+
+		if (this.settings.encVersion !== 2 && this.settings.encVersion !== 4) {
+			new Notice(`Encryption version ${this.settings.encVersion} is not supported.`);
+			return false;
+		}
+
+		return await new Promise<boolean>((resolve) => {
+			new PasswordModal(this.app, {
+				repoId: this.settings.repoId,
+				encVersion: this.settings.encVersion,
+				repoSalt: this.settings.repoSalt,
+				magic: this.settings.repoMagic,
+				randomKey: this.settings.randomKey
+			}, (crypto) => {
+				this.server.crypto = crypto;
+				resolve(true);
+			}, () => {
+				resolve(false);
+			}).open();
+		});
 	}
 
 	async clearVault(): Promise<void> {

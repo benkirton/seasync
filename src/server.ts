@@ -7,6 +7,7 @@ import { type SeafileSettings } from "./settings";
 import * as utils from "./utils";
 import pako from "pako";
 import { posix as Path } from "path-browserify";
+import { type RepoCrypto } from "./crypto";
 
 export const ZeroFs = "0000000000000000000000000000000000000000";
 export type SeafFs = FileSeafFs | DirSeafFs
@@ -126,7 +127,18 @@ export class MfaRequiredError extends Error {
 	}
 }
 
+export interface RepoDownloadInfo {
+  token: string
+  encrypted: boolean
+  enc_version: number
+  magic: string
+  random_key: string
+  salt: string
+}
+
 export default class Server {
+	public crypto: RepoCrypto | null = null;
+
 	public constructor (private readonly settings: SeafileSettings,
     private readonly plugin: SeafilePlugin
 	) {
@@ -269,8 +281,20 @@ export default class Server {
 	}
 
 	async getRepoToken (repoId: string): Promise<string> {
+		const info = await this.getRepoDownloadInfo(repoId);
+		return info.token;
+	}
+
+	async getRepoDownloadInfo (repoId: string): Promise<RepoDownloadInfo> {
 		const resp = await this.requestAPIv20({ url: `repos/${repoId}/download-info/`, responseType: "json" });
-		return resp.token;
+		return {
+			token: resp.token,
+			encrypted: !!resp.encrypted,
+			enc_version: resp.enc_version ?? 0,
+			magic: resp.magic ?? "",
+			random_key: resp.random_key ?? "",
+			salt: resp.salt ?? ""
+		};
 	}
 
 	async getDirInfo (path: string, recursive = false): Promise<DirInfo[]> {
@@ -613,7 +637,10 @@ export default class Server {
 				url: `repo/${this.settings.repoId}/block/${blockId}`,
 				responseType: "binary",
 				retry: 0
-			});
+			}) as ArrayBuffer;
+		if (this.crypto) {
+			return await this.crypto.decryptBlock(resp);
+		}
 		return resp;
 	}
 

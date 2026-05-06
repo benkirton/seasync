@@ -339,7 +339,9 @@ export class SyncController {
 		} else {
 			// to do: warn if file too large
 			const buffer = await this.adapter.readBinary(path);
-			blockBuffer = await utils.computeBlocks(buffer);
+			blockBuffer = server.crypto
+				? await utils.computeBlocksEncrypted(buffer, (chunk) => server.crypto!.encryptBlock(chunk))
+				: await utils.computeBlocks(buffer);
 
 			fs = {
 				block_ids: Object.keys(blockBuffer),

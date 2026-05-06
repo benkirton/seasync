@@ -204,6 +204,22 @@ export async function computeBlocks(buffer: ArrayBuffer): Promise<Record<string,
 	return blocks;
 }
 
+// For encrypted repos: split into 8MB chunks, AES-CBC encrypt each, key by SHA1(ciphertext).
+// Insertion order is preserved so the resulting block_ids align with file offsets on download.
+export async function computeBlocksEncrypted(buffer: ArrayBuffer, encrypt: (chunk: ArrayBuffer) => Promise<ArrayBuffer>): Promise<Record<string, ArrayBuffer>> {
+	const size = buffer.byteLength;
+	const blocks: Record<string, ArrayBuffer> = {};
+	const blockSize = 8 * 1024 * 1024;
+	const numBlocks = Math.ceil(size / blockSize);
+	for (let i = 0; i < numBlocks; i++) {
+		const plain = buffer.slice(i * blockSize, (i + 1) * blockSize);
+		const cipher = await encrypt(plain);
+		const hash = await sha1(cipher);
+		blocks[hash] = cipher;
+	}
+	return blocks;
+}
+
 // Faster way to convert an array buffer to a base64 string
 export async function arrayBufferToBase64(buffer: ArrayBuffer): Promise<string> {
 	return await new Promise<string>((resolve, reject) => {

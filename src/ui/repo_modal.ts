@@ -1,19 +1,25 @@
 import { App, Modal, Notice, Setting } from "obsidian";
 import { server } from "src/config";
-import { Repo } from "src/server";
+import { Repo, type RepoDownloadInfo } from "src/server";
 import { debug } from "src/utils";
 import prettyBytes from "pretty-bytes";
 
+export interface SelectedRepo {
+  repoName: string
+  repoId: string
+  info: RepoDownloadInfo
+}
+
 export default class RepoModal extends Modal {
 
-	constructor(app: App, private callback: (repoName: string, repoId: string, repoToken: string) => void) {
+	constructor(app: App, private callback: (selected: SelectedRepo) => void | Promise<void>) {
 		super(app);
 	}
 
 	async loadRepoToken(repo: Repo) {
 		try {
-			const repoToken = await server.getRepoToken(repo.repo_id);
-			this.callback(repo.repo_name, repo.repo_id, repoToken);
+			const info = await server.getRepoDownloadInfo(repo.repo_id);
+			await this.callback({ repoName: repo.repo_name, repoId: repo.repo_id, info });
 		}
 		catch (error) {
 			new Notice("Failed to load repository token. " + error.message);

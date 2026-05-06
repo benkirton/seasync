@@ -12,6 +12,13 @@ export interface SeafileSettings {
   devMode: boolean
   enableSync: boolean
   useFetch: boolean
+
+  // Encryption metadata (public, server-supplied). Password is never persisted.
+  encrypted: boolean
+  encVersion: number
+  repoSalt: string
+  repoMagic: string
+  randomKey: string
 }
 
 export const DEFAULT_SETTINGS: SeafileSettings = {
@@ -28,4 +35,9 @@ export const DEFAULT_SETTINGS: SeafileSettings = {
 	devMode: false,
 	enableSync: false,
 	useFetch: false,
+	encrypted: false,
+	encVersion: 0,
+	repoSalt: "",
+	repoMagic: "",
+	randomKey: "",
 };

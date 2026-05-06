@@ -1,8 +1,10 @@
 import { type App, type ButtonComponent, Notice, PluginSettingTab, Setting, type TextAreaComponent, type TextComponent } from "obsidian";
 import type SeafilePlugin from "src/main";
 import { debug } from "src/utils";
+import { server } from "src/config";
 import Dialog from "./dialog_modal";
 import LoginModal from "./login_modal";
+import PasswordModal from "./password_modal";
 import RepoModal from "./repo_modal";
 
 export class SeafileSettingTab extends PluginSettingTab {
@@ -61,6 +63,12 @@ export class SeafileSettingTab extends PluginSettingTab {
 						settings.repoName = "";
 						settings.repoId = "";
 						settings.repoToken = "";
+						settings.encrypted = false;
+						settings.encVersion = 0;
+						settings.repoSalt = "";
+						settings.repoMagic = "";
+						settings.randomKey = "";
+						server.crypto = null;
 						await this.plugin.saveSettings();
 						accountButton.setButtonText("Log in");
 						accountSetting.setDesc(accountDefaultDesc);
@@ -99,17 +107,49 @@ export class SeafileSettingTab extends PluginSettingTab {
 						settings.repoName = "";
 						settings.repoId = "";
 						settings.repoToken = "";
+						settings.encrypted = false;
+						settings.encVersion = 0;
+						settings.repoSalt = "";
+						settings.repoMagic = "";
+						settings.randomKey = "";
+						server.crypto = null;
 						repoSetting.setDesc(repoDefaultDesc);
 						await this.plugin.saveSettings();
 					}
-					new RepoModal(this.app, async (repoName, repoId, repoToken) => {
-						settings.repoName = repoName;
-						settings.repoId = repoId;
-						settings.repoToken = repoToken;
-						repoSetting.setDesc(repoName);
-						await this.plugin.saveSettings();
+					new RepoModal(this.app, async ({ repoName, repoId, info }) => {
+						const applyAndStart = async () => {
+							settings.repoName = repoName;
+							settings.repoId = repoId;
+							settings.repoToken = info.token;
+							settings.encrypted = info.encrypted;
+							settings.encVersion = info.enc_version;
+							settings.repoSalt = info.salt;
+							settings.repoMagic = info.magic;
+							settings.randomKey = info.random_key;
+							repoSetting.setDesc(repoName);
+							await this.plugin.saveSettings();
+							if (settings.enableSync) this.plugin.sync.startSync();
+						};
 
-						if (settings.enableSync) this.plugin.sync.startSync();
+						if (info.encrypted) {
+							if (info.enc_version !== 2 && info.enc_version !== 4) {
+								new Notice(`Encryption version ${info.enc_version} is not supported. Only v2 and v4 work.`);
+								return;
+							}
+							new PasswordModal(this.app, {
+								repoId,
+								encVersion: info.enc_version,
+								repoSalt: info.salt,
+								magic: info.magic,
+								randomKey: info.random_key
+							}, async (crypto) => {
+								server.crypto = crypto;
+								await applyAndStart();
+							}).open();
+						} else {
+							server.crypto = null;
+							await applyAndStart();
+						}
 					}).open();
 				});
 			});
