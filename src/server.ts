@@ -78,6 +78,15 @@ export interface Commit {
   device_name: string
   client_version: string
   version: number
+  // Encryption metadata. Required for commits to encrypted libraries: when these
+  // fields are absent the Seafile server treats the new head commit as plain and
+  // flips the library to encrypted=false, corrupting it. `encrypted` is the
+  // string "true" (Seafile wire convention), not a boolean.
+  encrypted?: "true"
+  enc_version?: number
+  magic?: string
+  random_key?: string
+  salt?: string
 }
 export interface Repo {
   type: string
@@ -479,6 +488,17 @@ export default class Server {
 			client_version: `obsidian-seafile_${this.plugin.manifest.version}`,
 			version: 1
 		};
+
+		if (this.settings.encrypted) {
+			commit.encrypted = "true";
+			commit.enc_version = this.settings.encVersion;
+			commit.magic = this.settings.repoMagic;
+			commit.random_key = this.settings.randomKey;
+			if (this.settings.repoSalt) {
+				commit.salt = this.settings.repoSalt;
+			}
+		}
+
 		const commit_id = await utils.computeCommitId(commit);
 		commit.commit_id = commit_id;
 
