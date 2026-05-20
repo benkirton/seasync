@@ -1,10 +1,10 @@
-# obsidian-seafile
+# obsidian-seafile-continued
 
 ## Introduction
 
 This is an [Obsidian](https://obsidian.md/) plugin designed to synchronize notes across devices using Seafile.
 
-![obsidian-seafile-demo](https://github.com/conql/obsidian-seafile/assets/49243542/5b8ac9aa-4180-4ca4-9abe-0b94134fd0c1)
+![obsidian-seafile-demo](https://github.com/ryanravn/obsidian-seafile-continued/assets/49243542/5b8ac9aa-4180-4ca4-9abe-0b94134fd0c1)
 
 ### What is Seafile?
 - [Seafile](https://www.seafile.com/) is an open source, self-hosted file sync and share solution with high performance and reliability. It supports efficient synchronization through delta downloads and uploads. Also, it provides user-friendly web UI and excellent syncing clients across multiple operating systems.
@@ -15,7 +15,7 @@ This is an [Obsidian](https://obsidian.md/) plugin designed to synchronize notes
 - Fast sync speed, performs well even on low-end Android phones.
 
 ## Usage
-<img src="https://github.com/conql/obsidian-seafile/assets/49243542/26399e88-d054-41cf-ae19-7bc82b178522" width="300">
+<img src="https://github.com/ryanravn/obsidian-seafile-continued/assets/49243542/26399e88-d054-41cf-ae19-7bc82b178522" width="300">
 
 1. Open settings.
 2. Enter the URL of your server and log into your Seafile account.
@@ -39,4 +39,4 @@ Your feedback and suggestions are highly appreciated. If you want to:
 - Report bugs or issues
 - Submit feature requests or enhancements
 
-Please open a [GitHub issue](https://github.com/conql/obsidian-seafile/issues). You can also contact me (@conql) on official Obsidian discord server.
+Please open a [GitHub issue](https://github.com/ryanravn/obsidian-seafile-continued/issues). You can also contact me (@ryanravn) on official Obsidian discord server.

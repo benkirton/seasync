@@ -1,10 +1,10 @@
 {
-	"id": "seafile",
-	"name": "Seafile",
+	"id": "seafile-continued",
+	"name": "Seafile Continued",
 	"version": "0.3.6",
 	"minAppVersion": "0.15.0",
 	"description": "Sync notes across devices using Seafile.",
-	"author": "conql",
-	"authorUrl": "https://github.com/conql",
+	"author": "ryanravn",
+	"authorUrl": "https://github.com/ryanravn",
 	"isDesktopOnly": false
 }
