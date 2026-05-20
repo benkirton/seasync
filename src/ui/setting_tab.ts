@@ -191,6 +191,21 @@ export class SeafileSettingTab extends PluginSettingTab {
 				});
 			});
 
+		new Setting(containerEl)
+			.setName("Manual sync")
+			.setDesc("Trigger a sync immediately.")
+			.addButton(button => button
+				.setButtonText("Sync now")
+				.onClick(async () => {
+					button.setDisabled(true);
+					try {
+						await this.plugin.triggerManualSync();
+					} finally {
+						button.setDisabled(false);
+					}
+				})
+			);
+
 		let intervalText: TextComponent;
 		new Setting(containerEl)
 			.setName("Sync interval")

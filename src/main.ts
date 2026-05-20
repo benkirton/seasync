@@ -45,6 +45,12 @@ export default class SeafilePlugin extends Plugin {
 
 		this.addSettingTab(new SeafileSettingTab(this.app, this));
 
+		this.addCommand({
+			id: "manual-sync",
+			name: "Sync now",
+			callback: async () => { await this.triggerManualSync(); },
+		});
+
 		if (this.settings.devMode) {
 			(window as any)["seafile"] = this; // for debug
 			this.addRibbonIcon("trash-2", "Clear vault", async () => {
@@ -91,6 +97,29 @@ export default class SeafilePlugin extends Plugin {
 
 		await this.sync.init();
 		this.sync.startSync();
+	}
+
+	async triggerManualSync(): Promise<void> {
+		if (!this.settings.enableSync) {
+			new Notice("Enable sync first to use manual sync");
+			return;
+		}
+		if (!this.checkSyncReady()) {
+			if (!this.settings.authToken) {
+				new Notice("Log in first before syncing");
+			} else if (!this.settings.repoId) {
+				new Notice("Choose a repository first before syncing");
+			} else {
+				new Notice("Sync is not ready");
+			}
+			return;
+		}
+		if (this.sync.status.type === "busy") {
+			new Notice("Sync already in progress");
+			return;
+		}
+		this.sync.startSync();
+		new Notice("Sync started");
 	}
 
 	checkSyncReady(): boolean {
