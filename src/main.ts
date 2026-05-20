@@ -18,7 +18,7 @@ export default class SeafilePlugin extends Plugin {
 	async onload(): Promise<void> {
 		this.settings = await this.loadSettings();
 		this.server = new Server(this.settings, this);
-		initConfig(this.app, this.server);
+		initConfig(this.app, this.server, this.manifest.id);
 
 		this.sync = new SyncController(this.app.vault.adapter, this.settings);
 		this.explorerView = new Explorer(this, this.sync);

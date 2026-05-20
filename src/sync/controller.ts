@@ -2,7 +2,7 @@ import * as IgnoreParser from "gitignore-parser";
 import { posix as Path } from "path-browserify";
 import { Notice, Platform, type DataAdapter } from "obsidian";
 import { type SeafileSettings } from "src/settings";
-import { DEFAULT_IGNORE, HEAD_COMMIT_PATH, server } from "../config";
+import { DEFAULT_IGNORE, HEAD_COMMIT_PATH, SYNC_DATA_PATH, SYNC_DLOG_PATH, server } from "../config";
 import { MODE_DIR, MODE_FILE, ZeroFs, type DirSeafDirent, type DirSeafFs, type FileSeafDirent, type FileSeafFs, type SeafDirent, type SeafFs } from "../server";
 import * as utils from "../utils";
 import { debug } from "../utils";
@@ -54,6 +54,14 @@ export class SyncController {
 	async init () {
 		SyncNode.onStateChanged = n => { this.raiseNodeStateChanged(n); };
 		this.nodeRoot = await SyncNode.load();
+
+		// Obsidian's adapter.append() throws ENOENT if the file doesn't exist,
+		// so ensure the log/data files are present before sync writes to them.
+		for (const path of [SYNC_DLOG_PATH, SYNC_DATA_PATH]) {
+			if (!await this.adapter.exists(path)) {
+				await this.adapter.write(path, "");
+			}
+		}
 
 		if (this.localHead === undefined) {
 			if (await this.adapter.exists(HEAD_COMMIT_PATH)) {
