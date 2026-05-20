@@ -1,7 +1,7 @@
 import esbuild from "esbuild";
 import process from "process";
-import builtins from "builtin-modules";
-import fs from "fs-extra";
+import { builtinModules as builtins } from "node:module";
+import fs from "node:fs";
 import CssModulesPlugin from "esbuild-css-modules-plugin";
 
 const banner =
@@ -61,7 +61,7 @@ const context = await esbuild.context({
 				});
 				build.onEnd(async () => {
 					// Copy dist/src folder to dist/ folder
-					fs.copySync("dist/src", "dist");
+					fs.cpSync("dist/src", "dist", { recursive: true });
 					fs.rmSync("dist/src", { recursive: true, force: true });
 					fs.renameSync("dist/main.css", "dist/styles.css");
 
@@ -75,7 +75,8 @@ const context = await esbuild.context({
 					const testVaultPath = "vault/.obsidian/plugins/seafile";
 					// if (fs.existsSync(testVaultPath))
 					// fs.rmSync(testVaultPath, { recursive: true, force: true });
-					fs.copySync("dist", testVaultPath);
+					fs.mkdirSync(testVaultPath, { recursive: true });
+					fs.cpSync("dist", testVaultPath, { recursive: true });
 					fs.writeFileSync(testVaultPath + "/data.json", JSON.stringify(appSettings));
 				});
 			}

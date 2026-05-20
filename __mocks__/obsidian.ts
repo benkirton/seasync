@@ -1,5 +1,4 @@
 import * as fs from 'fs/promises';
-import fetch from 'node-fetch';
 import { App, DataAdapter, DataWriteOptions, ListedFiles, RequestUrlParam, RequestUrlResponsePromise, Stat } from "obsidian"
 import { PlatformPath } from 'path/posix';
 export const Path = (require("path-browserify").posix) as PlatformPath;
