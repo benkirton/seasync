@@ -1,42 +1,56 @@
 # obsidian-seafile-continued
 
-## Introduction
+An [Obsidian](https://obsidian.md/) plugin for synchronizing notes across devices using [Seafile](https://www.seafile.com/), an open-source, self-hosted file sync and share solution.
 
-This is an [Obsidian](https://obsidian.md/) plugin designed to synchronize notes across devices using Seafile.
+This is a community continuation of [conql/obsidian-seafile](https://github.com/conql/obsidian-seafile) with additional features and fixes.
 
-![obsidian-seafile-demo](https://github.com/ryanravn/obsidian-seafile-continued/assets/49243542/5b8ac9aa-4180-4ca4-9abe-0b94134fd0c1)
+## What's different in this fork
 
-### What is Seafile?
-- [Seafile](https://www.seafile.com/) is an open source, self-hosted file sync and share solution with high performance and reliability. It supports efficient synchronization through delta downloads and uploads. Also, it provides user-friendly web UI and excellent syncing clients across multiple operating systems.
+- **Encrypted repositories** are supported (enc_version 2 and 4). Passphrase is prompted on repo selection and on Obsidian restart, never stored in plaintext.
+- **Manual sync**: a "Sync now" button in settings and a "Seafile: Sync now" command (assignable to a hotkey) trigger an immediate sync without waiting for the interval tick.
 
-### Features
+## Features
+
 - Supports both desktop and mobile.
-- Utilizes Seafile's internal syncing API for full synchronization functionality.
+- Uses Seafile's internal syncing API for full synchronization (delta upload/download).
 - Fast sync speed, performs well even on low-end Android phones.
+- End-to-end encrypted libraries (v2 and v4).
 
 ## Usage
-<img src="https://github.com/ryanravn/obsidian-seafile-continued/assets/49243542/26399e88-d054-41cf-ae19-7bc82b178522" width="300">
 
-1. Open settings.
-2. Enter the URL of your server and log into your Seafile account.
-3. Choose the repository you want to sync.
-4. *Optional*: Specify the files you want to ignore. The pattern format loosely follows [gitignore syntax](https://git-scm.com/docs/gitignore). Test your pattern before using it. The path to the plugin itself and Obsidian configurations are prepended to the user-defined ignore list.
+1. Open the plugin settings.
+2. Enter the URL of your Seafile server and log into your account.
+3. Choose the repository you want to sync. If it's encrypted, enter the passphrase when prompted.
+4. *Optional*: configure an ignore pattern. The syntax loosely follows [gitignore](https://git-scm.com/docs/gitignore). Test it before relying on it. The plugin folder and Obsidian configuration are always ignored.
 5. Click "Enable" to start syncing.
-6. The plugin will now sync your files at intervals. 
+6. The plugin will now sync at the configured interval.
 
-For each individual file, the syncing status will be displayed next to file names. Additionally, an icon will appear in the bottom right corner of the File Explorer. Clicking on this icon initiates the syncing process immediately, without the need to wait for the next interval.
+To trigger a sync immediately, click "Sync now" in the settings, or run "Seafile: Sync now" from the command palette (assign it a hotkey if you use it often).
+
+Per-file sync status is shown next to file names in the explorer.
 
 ## Notes
-1. **Does not support encrypted repositories:** This feature has not been implemented yet but will be considered for addition.
-2. **Use it at your own risk:** This plugin is currently in development. There is a risk of *data corruption or loss* when using the plugin. Ensure you have backups of your important data.
-3. **No large files:** Due to limitations of Obsidian's API, downloading or uploading large files (e.g., larger than 50MB) *may take a long time or cause the app to crash*. Please do not use the plugin for files that are too large.
-4. **Clear vault:** If you encounter any problems, you could try to *Clear vault* and restart syncing.
-5. **Don't interrupt:** Do not close Obsidian while syncing, especially when uploading data to the server (an upload icon will be shown). Otherwise, expect data corruption or loss.
-6. **Hidden files**: Limited by the API, hideen files and folders (name starting with dot, e.g. ".obsidian") will not be tracked. They are only updated at plugin startup.
+
+1. **Use it at your own risk.** This plugin is still under development. There is a risk of data corruption or loss. Keep backups of anything important.
+2. **No large files.** Due to limitations of Obsidian's API, downloading or uploading files larger than ~50 MB may take a long time or crash the app. Don't sync large attachments through this plugin.
+3. **Clear vault** if you hit issues. The action removes all local files and resyncs from the server.
+4. **Don't interrupt syncing**, especially during upload (upload icon shown). Closing Obsidian mid-sync can corrupt data on the server.
+5. **Hidden files** (anything starting with a dot, e.g. `.obsidian`) are not tracked continuously due to API limits. They are only updated at plugin startup.
+
+## Installation
+
+Not yet in the Obsidian community store. Install via [BRAT](https://github.com/TfTHacker/obsidian42-brat):
+
+1. Install BRAT from Settings → Community plugins → Browse.
+2. BRAT → "Add beta plugin" → `https://github.com/ryanravn/obsidian-seafile-continued`.
+3. Enable "Seafile Continued" under Community plugins.
+
+Alternatively, copy `main.js`, `manifest.json`, and `styles.css` from a [release](https://github.com/ryanravn/obsidian-seafile-continued/releases) into `<vault>/.obsidian/plugins/seafile-continued/`.
+
 ## Contribution & Support
 
-Your feedback and suggestions are highly appreciated. If you want to:
-- Report bugs or issues
-- Submit feature requests or enhancements
+Open a [GitHub issue](https://github.com/ryanravn/obsidian-seafile-continued/issues) for bugs, feature requests, or questions.
 
-Please open a [GitHub issue](https://github.com/ryanravn/obsidian-seafile-continued/issues). You can also contact me (@ryanravn) on official Obsidian discord server.
+## Credits
+
+Original plugin by [@conql](https://github.com/conql). This continuation maintained by [@ryanravn](https://github.com/ryanravn).
