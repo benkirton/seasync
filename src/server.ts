@@ -81,11 +81,13 @@ export interface Commit {
   // Encryption metadata. Required for commits to encrypted libraries: when these
   // fields are absent the Seafile server treats the new head commit as plain and
   // flips the library to encrypted=false, corrupting it. `encrypted` is the
-  // string "true" (Seafile wire convention), not a boolean.
+  // string "true" (Seafile wire convention), not a boolean. The wrapped block
+  // key is named `key` in the commit JSON even though the same value is exposed
+  // as `random_key` on /download-info/.
   encrypted?: "true"
   enc_version?: number
   magic?: string
-  random_key?: string
+  key?: string
   salt?: string
 }
 export interface Repo {
@@ -493,7 +495,7 @@ export default class Server {
 			commit.encrypted = "true";
 			commit.enc_version = this.settings.encVersion;
 			commit.magic = this.settings.repoMagic;
-			commit.random_key = this.settings.randomKey;
+			commit.key = this.settings.randomKey;
 			if (this.settings.repoSalt) {
 				commit.salt = this.settings.repoSalt;
 			}
