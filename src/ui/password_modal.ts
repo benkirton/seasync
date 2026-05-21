@@ -1,11 +1,13 @@
 import { App, Modal, Notice, Setting, type ButtonComponent } from "obsidian";
 import { RepoCrypto, type RepoCryptoMetadata, WrongPasswordError } from "../crypto";
+import { getPasswordStore } from "../password_store";
 import { debug } from "../utils";
 
-export type PasswordCallback = (crypto: RepoCrypto) => Promise<void> | void;
+export type PasswordCallback = (crypto: RepoCrypto, password: string, remember: boolean) => Promise<void> | void;
 
 export default class PasswordModal extends Modal {
 	private password = "";
+	private remember = false;
 	private submitBtn: ButtonComponent | null = null;
 
 	constructor (app: App,
@@ -20,7 +22,7 @@ export default class PasswordModal extends Modal {
 		contentEl.empty();
 		this.titleEl.textContent = "Unlock encrypted repository";
 		contentEl.createEl("p", {
-			text: "Enter the repository password. It is held in memory only and never written to disk."
+			text: "Enter the repository password."
 		});
 
 		new Setting(contentEl)
@@ -35,6 +37,15 @@ export default class PasswordModal extends Modal {
 				text.inputEl.addEventListener("keydown", (e) => {
 					if (e.key === "Enter" && this.password) void this.submit();
 				});
+			});
+
+		const store = getPasswordStore();
+		new Setting(contentEl)
+			.setName("Remember on this device")
+			.setDesc(store.description)
+			.addToggle(toggle => {
+				toggle.setValue(this.remember);
+				toggle.onChange(v => { this.remember = v; });
 			});
 
 		new Setting(contentEl)
@@ -53,7 +64,7 @@ export default class PasswordModal extends Modal {
 		try {
 			const crypto = await RepoCrypto.unlock(this.meta, this.password);
 			this.cancelled = false;
-			await this.callback(crypto);
+			await this.callback(crypto, this.password, this.remember);
 			this.close();
 		} catch (e) {
 			if (e instanceof WrongPasswordError) {

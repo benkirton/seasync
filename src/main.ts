@@ -1,13 +1,15 @@
 import { Notice, Plugin } from "obsidian";
 import * as IgnoreParser from "gitignore-parser";
 import { DEFAULT_IGNORE, initConfig, PLUGIN_DIR } from "./config";
+import { RepoCrypto } from "./crypto";
+import { getPasswordStore } from "./password_store";
 import Server from "./server";
 import { DEFAULT_SETTINGS, type SeafileSettings } from "./settings";
 import { SyncController } from "./sync/controller";
 import { Explorer } from "./ui/explorer";
 import PasswordModal from "./ui/password_modal";
 import { SeafileSettingTab } from "./ui/setting_tab";
-import { disableDebugConsole } from "./utils";
+import { debug, disableDebugConsole } from "./utils";
 
 export default class SeafilePlugin extends Plugin {
 	settings: SeafileSettings;
@@ -73,7 +75,9 @@ export default class SeafilePlugin extends Plugin {
 		}
 
 		if (this.settings.enableSync) {
-			await this.enableSync();
+			// Don't block onload() on the password prompt or sync init —
+			// otherwise Obsidian shows "loading" until the user types the password.
+			void this.enableSync();
 		}
 	}
 
@@ -141,15 +145,39 @@ export default class SeafilePlugin extends Plugin {
 			return false;
 		}
 
+		const meta = {
+			repoId: this.settings.repoId,
+			encVersion: this.settings.encVersion,
+			repoSalt: this.settings.repoSalt,
+			magic: this.settings.repoMagic,
+			randomKey: this.settings.randomKey
+		};
+
+		const store = getPasswordStore();
+		const stored = await store.load(this.settings.repoId);
+		if (stored) {
+			try {
+				this.server.crypto = await RepoCrypto.unlock(meta, stored);
+				return true;
+			} catch (e) {
+				// Stored password no longer valid (password changed, repo re-keyed, etc).
+				// Drop it and fall through to prompt.
+				debug.warn("Stored repo password rejected, clearing it", e);
+				await store.clear(this.settings.repoId);
+			}
+		}
+
 		return await new Promise<boolean>((resolve) => {
-			new PasswordModal(this.app, {
-				repoId: this.settings.repoId,
-				encVersion: this.settings.encVersion,
-				repoSalt: this.settings.repoSalt,
-				magic: this.settings.repoMagic,
-				randomKey: this.settings.randomKey
-			}, (crypto) => {
+			new PasswordModal(this.app, meta, async (crypto, password, remember) => {
 				this.server.crypto = crypto;
+				if (remember) {
+					try {
+						await store.save(this.settings.repoId, password);
+					} catch (e) {
+						new Notice("Could not save password: " + (e as Error).message);
+						debug.error(e);
+					}
+				}
 				resolve(true);
 			}, () => {
 				resolve(false);

@@ -2,6 +2,7 @@ import { type App, type ButtonComponent, Notice, PluginSettingTab, Setting, type
 import type SeafilePlugin from "src/main";
 import { debug } from "src/utils";
 import { server } from "src/config";
+import { getPasswordStore } from "src/password_store";
 import Dialog from "./dialog_modal";
 import LoginModal from "./login_modal";
 import PasswordModal from "./password_modal";
@@ -56,6 +57,7 @@ export class SeafileSettingTab extends PluginSettingTab {
 						const result = await this.askClearVault("To log out, you need to clear your vault first.\n\n");
 						if (!result) return;
 
+						const oldRepoId = settings.repoId;
 						settings.account = "";
 						settings.authToken = "";
 						settings.deviceName = "";
@@ -69,6 +71,7 @@ export class SeafileSettingTab extends PluginSettingTab {
 						settings.repoMagic = "";
 						settings.randomKey = "";
 						server.crypto = null;
+						if (oldRepoId) await getPasswordStore().clear(oldRepoId);
 						await this.plugin.saveSettings();
 						accountButton.setButtonText("Log in");
 						accountSetting.setDesc(accountDefaultDesc);
@@ -104,6 +107,7 @@ export class SeafileSettingTab extends PluginSettingTab {
 						const result = await this.askClearVault("To change repository, you need to clear your vault first.\n\n");
 						if (!result) return;
 
+						const oldRepoId = settings.repoId;
 						settings.repoName = "";
 						settings.repoId = "";
 						settings.repoToken = "";
@@ -113,6 +117,7 @@ export class SeafileSettingTab extends PluginSettingTab {
 						settings.repoMagic = "";
 						settings.randomKey = "";
 						server.crypto = null;
+						if (oldRepoId) await getPasswordStore().clear(oldRepoId);
 						repoSetting.setDesc(repoDefaultDesc);
 						await this.plugin.saveSettings();
 					}
@@ -142,8 +147,16 @@ export class SeafileSettingTab extends PluginSettingTab {
 								repoSalt: info.salt,
 								magic: info.magic,
 								randomKey: info.random_key
-							}, async (crypto) => {
+							}, async (crypto, password, remember) => {
 								server.crypto = crypto;
+								if (remember) {
+									try {
+										await getPasswordStore().save(repoId, password);
+									} catch (e) {
+										new Notice("Could not save password: " + (e as Error).message);
+										debug.error(e);
+									}
+								}
 								await applyAndStart();
 							}).open();
 						} else {
@@ -153,6 +166,36 @@ export class SeafileSettingTab extends PluginSettingTab {
 					}).open();
 				});
 			});
+
+		if (settings.encrypted && settings.repoId) {
+			const store = getPasswordStore();
+			const savedPasswordSetting = new Setting(containerEl)
+				.setName("Saved password")
+				.setDesc("Checking...");
+
+			let forgetBtn!: ButtonComponent;
+			savedPasswordSetting.addButton(button => {
+				forgetBtn = button;
+				button.setButtonText("Forget").setDisabled(true);
+				button.onClick(async () => {
+					button.setDisabled(true);
+					await store.clear(settings.repoId);
+					savedPasswordSetting.setDesc("No password saved on this device.");
+					new Notice("Saved password cleared");
+				});
+			});
+
+			void (async () => {
+				const stored = await store.load(settings.repoId);
+				if (stored) {
+					savedPasswordSetting.setDesc(`Saved. ${store.description}`);
+					forgetBtn.setDisabled(false);
+				} else {
+					savedPasswordSetting.setDesc("No password saved on this device.");
+				}
+			})();
+		}
+
 		let enableSyncButton: ButtonComponent;
 		const enableSyncSetting = new Setting(containerEl)
 			.setName("Sync status")
