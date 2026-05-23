@@ -37,16 +37,6 @@ Per-file sync status is shown next to file names in the explorer.
 4. **Don't interrupt syncing**, especially during upload (upload icon shown). Closing Obsidian mid-sync can corrupt data on the server.
 5. **Hidden files** (anything starting with a dot, e.g. `.obsidian`) are not tracked continuously due to API limits. They are only updated at plugin startup.
 
-## Installation
-
-Not yet in the Obsidian community store. Install via [BRAT](https://github.com/TfTHacker/obsidian42-brat):
-
-1. Install BRAT from Settings → Community plugins → Browse.
-2. BRAT → "Add beta plugin" → `https://github.com/ryanravn/obsidian-seafile-continued`.
-3. Enable "Seafile Continued" under Community plugins.
-
-Alternatively, copy `main.js`, `manifest.json`, and `styles.css` from a [release](https://github.com/ryanravn/obsidian-seafile-continued/releases) into `<vault>/.obsidian/plugins/seafile-continued/`.
-
 ## Contribution & Support
 
 Open a [GitHub issue](https://github.com/ryanravn/obsidian-seafile-continued/issues) for bugs, feature requests, or questions.
