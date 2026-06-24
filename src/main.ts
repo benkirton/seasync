@@ -99,8 +99,24 @@ export default class SeafilePlugin extends Plugin {
 			return;
 		}
 
+		// Wait until Obsidian's vault index has finished loading before the first
+		// sync. fastStat()/fastList() resolve local files through that index
+		// (app.vault.getAbstractFileByPath); if sync runs while it is still
+		// populating, every tracked file looks locally deleted and gets removed on
+		// the server, then re-added once the index loads -- the "bulk delete
+		// followed by bulk reupload" of issue #1. onLayoutReady fires immediately
+		// if the layout is already ready, so this is also correct when the user
+		// enables sync manually from settings.
+		await this.whenLayoutReady();
+
 		await this.sync.init();
 		this.sync.startSync();
+	}
+
+	private async whenLayoutReady(): Promise<void> {
+		await new Promise<void>((resolve) => {
+			this.app.workspace.onLayoutReady(() => { resolve(); });
+		});
 	}
 
 	async triggerManualSync(): Promise<void> {

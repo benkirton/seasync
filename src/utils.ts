@@ -264,14 +264,6 @@ export function disableDebugConsole(): void {
 	}
 }
 
-export function isHiddenPath(path: string): boolean {
-	const parts = path.split("/");
-	for (const part of parts) {
-		if (part.startsWith(".")) return true;
-	}
-	return false;
-}
-
 export async function fastStat(path: string): Promise<Stat | null> {
 	while (path.startsWith("/")) path = path.slice(1);
 	while (path.endsWith("/")) path = path.slice(0, -1);
@@ -284,10 +276,14 @@ export async function fastStat(path: string): Promise<Stat | null> {
 		} else {
 			return { size: 0, ctime: 0, mtime: 0, type: "folder" };
 		}
-	} else if (isHiddenPath(path)) {
-		return await config.app.vault.adapter.stat(path);
 	} else {
-		return null;
+		// The file is not in Obsidian's in-memory index. That can mean it really
+		// is gone -- or that the index has not finished loading yet (e.g. right
+		// after launch). Confirm against the actual filesystem before treating it
+		// as absent: a stale index reporting null is what produced the spurious
+		// "bulk delete then reupload" in issue #1. adapter.stat returns null only
+		// when the file is genuinely missing on disk.
+		return await config.app.vault.adapter.stat(path);
 	}
 }
 
