@@ -37,7 +37,7 @@ export class SeafileSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 						new Notice("Host saved");
 					} catch (error) {
-						new Notice(error.message as string);
+						new Notice((error as Error).message);
 					}
 					hostText.setValue(settings.host);
 				})
@@ -339,7 +339,7 @@ export class SeafileSettingTab extends PluginSettingTab {
 					try {
 						await this.plugin.clearVault();
 					} catch (error) {
-						new Notice(`Failed to clear vault: ${error.message}`);
+						new Notice(`Failed to clear vault: ${(error as Error).message}`);
 						debug.error(error);
 					}
 					resolve(true);

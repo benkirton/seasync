@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   build-and-release:
@@ -28,9 +30,17 @@ jobs:
       - name: Build project
         run: pnpm run build
 
+      - name: Generate artifact attestations
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: |
+            dist/main.js
+            dist/styles.css
+            dist/manifest.json
+
       - name: Read version from manifest
         id: package_version
-        run: echo "::set-output name=VERSION::$(jq -r '.version' manifest.json)"
+        run: echo "VERSION=$(jq -r '.version' manifest.json)" >> "$GITHUB_OUTPUT"
         shell: bash
       
       - name: Delete existing release
@@ -71,3 +81,4 @@ jobs:
           artifacts: "dist/*"
           prerelease: false
           makeLatest: true
+          generateReleaseNotes: true

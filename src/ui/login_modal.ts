@@ -3,7 +3,7 @@ import { server } from "src/config";
 import { MfaRequiredError } from "src/server";
 import { debug } from "src/utils";
 
-export type LoginCallback = (account: string, token: string, deviceName: string, deviceId: string) => void;
+export type LoginCallback = (account: string, token: string, deviceName: string, deviceId: string) => void | Promise<void>;
 
 export default class LoginModal extends Modal {
 	private deviceName: string = "obsidian-seafile";
@@ -29,7 +29,7 @@ export default class LoginModal extends Modal {
 	private showMfaField(): void {
 		if (!this.otpSetting) return;
 		this.otpSetting.settingEl.show();
-		const input = this.otpSetting.settingEl.querySelector("input") as HTMLInputElement | null;
+		const input = this.otpSetting.settingEl.querySelector("input");
 		if (input) input.focus();
 		this.updateLoginButtonState();
 	}
@@ -124,7 +124,7 @@ export default class LoginModal extends Modal {
 								new Notice("Two-factor authentication required. Please enter your OTP.");
 							}
 						} else {
-							new Notice("Login failed: " + error.message);
+							new Notice("Login failed: " + (error as Error).message);
 							debug.error(error);
 						}
 					}

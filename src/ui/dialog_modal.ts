@@ -1,7 +1,7 @@
 import { App, ButtonComponent, Modal, Setting } from "obsidian";
 
 export default class Dialog extends Modal {
-	constructor(app: App, private title: string, private message: string, private onConfirm?: () => void, private onCancel?: () => void) {
+	constructor(app: App, private title: string, private message: string, private onConfirm?: () => void | Promise<void>, private onCancel?: () => void | Promise<void>) {
 		super(app);
 	}
 
@@ -35,6 +35,6 @@ export default class Dialog extends Modal {
 	}
 
 	onClose(): void {
-		this.onCancel?.();
+		void this.onCancel?.();
 	}
 }

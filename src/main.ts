@@ -54,7 +54,7 @@ export default class SeafilePlugin extends Plugin {
 		});
 
 		if (this.settings.devMode) {
-			(window as any)["seafile"] = this; // for debug
+			(window as unknown as Record<string, unknown>)["seafile"] = this; // for debug
 			this.addRibbonIcon("trash-2", "Clear vault", async () => {
 				await this.clearVault();
 			});
@@ -262,7 +262,8 @@ export default class SeafilePlugin extends Plugin {
 	}
 
 	async loadSettings(): Promise<SeafileSettings> {
-		const settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		const data = await this.loadData() as Partial<SeafileSettings> | null;
+		const settings: SeafileSettings = Object.assign({}, DEFAULT_SETTINGS, data);
 		return settings;
 	}
 

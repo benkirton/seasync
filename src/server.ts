@@ -62,6 +62,16 @@ export class RequestParam {
 	retry?: number;
 }
 
+// Normalized response surface returned by the low-level request layer, so the
+// requestUrl and fetch code paths expose the same shape. `json()` resolves to
+// `unknown`; callers narrow/cast it to the appropriate API response interface.
+interface RequestResponse {
+	status: number;
+	text: () => Promise<string>;
+	json: () => Promise<unknown>;
+	arrayBuffer: () => Promise<ArrayBuffer>;
+}
+
 export interface Commit {
   commit_id: string
   root_id: string
@@ -155,19 +165,21 @@ export default class Server {
 	) {
 	}
 
-	private async request (req: RequestUrlParam & RequestParam) {
+	private async request (req: RequestUrlParam & RequestParam): Promise<RequestResponse> {
 		if(!this.settings.useFetch)
 		{
 			const response = await pTimeout(requestUrl(req), { milliseconds: 120 * 1000 });
 			return {
 				status: response.status,
-				text: async () => await response.text,
-				json: async () => await response.json,
-				arrayBuffer: async () => await response.arrayBuffer
+				text: () => Promise.resolve(response.text),
+				json: () => Promise.resolve(response.json as unknown),
+				arrayBuffer: () => Promise.resolve(response.arrayBuffer)
 			};
 		}
 		else
 		{
+			// Intentional opt-in alternative to requestUrl, gated by settings.useFetch.
+			// eslint-disable-next-line no-restricted-globals
 			const response = await fetch(req.url, {
 				method: req.method,
 				headers: req.headers,
@@ -175,15 +187,15 @@ export default class Server {
 			});
 			return {
 				status: response.status,
-				text: async () => await response.text(),
-				json: async () => await response.json(),
-				arrayBuffer: async () => await response.arrayBuffer()
+				text: () => response.text(),
+				json: () => response.json() as Promise<unknown>,
+				arrayBuffer: () => response.arrayBuffer()
 			};
 		}
 	}
 
-	private readonly requestThrottled = pThrottle({ interval: 100, limit: 5 })(this.request);
-	private async sendRequest (param: RequestParam) {
+	private readonly requestThrottled = pThrottle({ interval: 100, limit: 5 })((req: RequestUrlParam & RequestParam) => this.request(req));
+	private async sendRequest (param: RequestParam): Promise<unknown> {
 		const req: RequestUrlParam & RequestParam = { ...param };
 		req.throw = false;
 		req.retry = req.retry || 1;
@@ -191,15 +203,16 @@ export default class Server {
 
 		const resp = await pRetry(async () => await this.requestThrottled(req), { retries: param.retry });
 		const status = resp.status.toString();
-		let ret = null;
+		let ret: unknown = null;
 
 		if (req.responseType === "text") {
 			ret = await resp.text();
 		} else if (req.responseType === "binary") {
 			ret = await resp.arrayBuffer();
 		} else {
-			ret = await resp.json();
-			if (ret.error_msg) { throw new Error(ret.error_msg); }
+			const json = await resp.json() as { error_msg?: string };
+			ret = json;
+			if (json.error_msg) { throw new Error(json.error_msg); }
 		}
 
 		if (!status.startsWith("2") && !status.startsWith("3")) {
@@ -260,7 +273,7 @@ export default class Server {
 
 		if (resp.status != 200) {
 			if (resp.status == 400) {
-				const data = await resp.json();
+				const data = await resp.json() as { non_field_errors?: string[] };
 				const errors: string[] = data.non_field_errors || [];
 				const isMfaError = errors.some((e) => {
 					const msg = e.toLowerCase();
@@ -275,7 +288,7 @@ export default class Server {
 			}
 		}
 
-		const data = await resp.json();
+		const data = await resp.json() as { token: string };
 		return data.token;
 	}
 
@@ -297,7 +310,14 @@ export default class Server {
 	}
 
 	async getRepoDownloadInfo (repoId: string): Promise<RepoDownloadInfo> {
-		const resp = await this.requestAPIv20({ url: `repos/${repoId}/download-info/`, responseType: "json" });
+		const resp = await this.requestAPIv20({ url: `repos/${repoId}/download-info/`, responseType: "json" }) as {
+			token: string;
+			encrypted?: unknown;
+			enc_version?: number;
+			magic?: string;
+			random_key?: string;
+			salt?: string;
+		};
 		return {
 			token: resp.token,
 			encrypted: !!resp.encrypted,
@@ -311,13 +331,13 @@ export default class Server {
 	async getDirInfo (path: string, recursive = false): Promise<DirInfo[]> {
 		path = encodeURIComponent(path);
 		const resp = await this.requestAPIv20({ url: `repos/${this.settings.repoId}/dir/?p=${path}&recursive=${recursive ? 1 : 0}` });
-		return resp;
+		return resp as DirInfo[];
 	}
 
 	async getFileDownloadLink (remotePath: string): Promise<string> {
 		remotePath = encodeURIComponent(remotePath);
 		const downloadUrl = await this.requestAPIv20({ url: `repos/${this.settings.repoId}/file/?p=${remotePath}` });
-		return downloadUrl;
+		return downloadUrl as string;
 	}
 
 	async getFileContent (remotePath: string): Promise<ArrayBuffer> {
@@ -370,7 +390,7 @@ export default class Server {
 		try {
 			const dirInfo = await this.getDirInfo(path, false);
 			return !!dirInfo;
-		} catch (e) {
+		} catch {
 			return false;
 		}
 	}
@@ -418,12 +438,12 @@ export default class Server {
 
 			try {
 				new URL(uploadLink as string);
-			} 
-			catch (e) {
+			}
+			catch {
 				throw new Error("Invalid upload link: " + JSON.stringify(uploadLink));
 			}
 		} catch (e) {
-			throw new Error("Failed to get upload link. " + e.message);
+			throw new Error("Failed to get upload link. " + (e as Error).message);
 		}
 
 		const formData = new utils.FormData();
@@ -436,7 +456,7 @@ export default class Server {
 		}
 
 		const response = await this.request({
-			url: uploadLink + "?ret-json=1",
+			url: (uploadLink as string) + "?ret-json=1",
 			method: "POST",
 			headers: {
 				Authorization: `Token ${this.settings.authToken}`,
@@ -446,12 +466,12 @@ export default class Server {
 			throw: false
 		});
 		if (response.status != 200) {
-			throw new Error("Upload error. " + response.text);
+			throw new Error("Upload error. " + String(response.text));
 		}
 	}
 
 	async getHeadCommitId (): Promise<string> {
-		const resp = await this.requestSeafHttp({ url: `repo/${this.settings.repoId}/commit/HEAD` });
+		const resp = await this.requestSeafHttp({ url: `repo/${this.settings.repoId}/commit/HEAD` }) as { head_commit_id: string };
 		return resp.head_commit_id;
 	}
 
@@ -575,7 +595,7 @@ export default class Server {
 			method: "POST",
 			body: JSON.stringify(fsList),
 			responseType: "binary"
-		});
+		}) as ArrayBuffer;
 
 		const utf8Decoder = new TextDecoder("utf-8");
 		while (data.byteLength > 0) {
@@ -592,7 +612,7 @@ export default class Server {
 	}
 
 	getFs = utils.memoizeWithLimit<[fs: string], SeafFsResult>(
-		utils.packRequest<string, SeafFsResult>(this.getPackFs.bind(this), 10, 200, 100)
+		utils.packRequest<string, SeafFsResult>((fsList: string[]) => this.getPackFs(fsList), 10, 200, 100)
 		, 1000);
 
 	async sendPackFs (fsList: SeafFsResult[]): Promise<Map<SeafFsResult, boolean>> {
@@ -640,18 +660,20 @@ export default class Server {
 		return result;
 	}
 
-	sendFs = utils.packRequest<[string, SeafFs], void>(this.sendPackFs.bind(this), 1, 300, 1000);
+	sendFs = utils.packRequest<[string, SeafFs], void>(
+		(fsList: [string, SeafFs][]) => this.sendPackFs(fsList) as unknown as Promise<Map<[string, SeafFs], void>>,
+		1, 300, 1000);
 
 	// check if the fs are in the server
 	async checkFsList (fsList: string[]): Promise<Map<string, boolean>> {
 		const result = new Map<string, boolean>(fsList.map((fsId: string) => [fsId, false]));
-		const resp = await this.requestSeafHttp({ url: `repo/${this.settings.repoId}/check-fs/`, method: "POST", body: JSON.stringify(fsList), retry: 0 });
+		const resp = await this.requestSeafHttp({ url: `repo/${this.settings.repoId}/check-fs/`, method: "POST", body: JSON.stringify(fsList), retry: 0 }) as string[];
 		// resp is an array of not found fs
 		resp.forEach((fsId: string) => result.set(fsId, true));
 		return result;
 	}
 
-	checkFs = utils.packRequest<string, boolean>(this.checkFsList.bind(this), 1, 300, 1000);
+	checkFs = utils.packRequest<string, boolean>((fsList: string[]) => this.checkFsList(fsList), 1, 300, 1000);
 
 	async getBlock (blockId: string): Promise<ArrayBuffer> {
 		const resp = await this.requestSeafHttp(
@@ -679,12 +701,12 @@ export default class Server {
 		const map = new Map<string, boolean>();
 		for (const block of blocksList) { map.set(block, false); }
 
-		const resp = await this.requestSeafHttp({ url: `repo/${this.settings.repoId}/check-blocks/`, method: "POST", body: JSON.stringify(blocksList), retry: 0 });
+		const resp = await this.requestSeafHttp({ url: `repo/${this.settings.repoId}/check-blocks/`, method: "POST", body: JSON.stringify(blocksList), retry: 0 }) as string[];
 		// resp is an array of not found blocks
 
 		for (const block of resp) { map.set(block, true); }
 		return map;
 	}
 
-	checkBlock = utils.packRequest<string, boolean>(this.checkBlocksList.bind(this), 1, 300, 1000);
+	checkBlock = utils.packRequest<string, boolean>((blocksList: string[]) => this.checkBlocksList(blocksList), 1, 300, 1000);
 }

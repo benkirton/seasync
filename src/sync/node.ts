@@ -64,7 +64,7 @@ export class SyncNode {
 	set state(value: SyncState) {
 		this._state = new Proxy(value, {
 			set: (target, prop, value) => {
-				Object.assign(target, { [prop]: value });
+				Reflect.set(target, prop, value);
 				SyncNode.onStateChanged?.(this);
 				return true;
 			}

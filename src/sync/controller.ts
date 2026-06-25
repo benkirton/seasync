@@ -95,7 +95,12 @@ export class SyncController {
 				} else {
 					// Hacky way to get the filesystem plugin to append to file when mobile
 					const encoded = await utils.arrayBufferToBase64(block);
-					await (window.top as any).Capacitor.Plugins.Filesystem.appendFile({ path: nativePath, data: encoded });
+					const capacitor = window.top as unknown as {
+						Capacitor: { Plugins: { Filesystem: { appendFile(options: { path: string; data: string }): Promise<void> } } }
+					};
+					// nativePath is intentionally passed through unchanged to preserve
+					// existing runtime behavior (it is not awaited here).
+					await capacitor.Capacitor.Plugins.Filesystem.appendFile({ path: nativePath as unknown as string, data: encoded });
 				}
 			}
 
@@ -208,8 +213,8 @@ export class SyncController {
 			}
 		}
 		if ((target == "remote" || target == "merge") && remote && remote.mode == MODE_DIR) {
-			let [, fs] = await server.getFs(remote.id);
-			fs = fs as DirSeafFs;
+			const [, rawFs] = await server.getFs(remote.id);
+			const fs = rawFs as DirSeafFs | null;
 			if (!newChildrenNames) newChildrenNames = new Set();
 			if (fs) {
 				for (const dirent of fs.dirents) {
@@ -536,13 +541,13 @@ export class SyncController {
 		if (SyncNode.dataLogCount > 100) { await SyncNode.save(this.nodeRoot); }
 	}
 
-	private timeoutId: number | NodeJS.Timeout;
+	private timeoutId: number;
 	private _status: SyncStatus = { type: "stop" };
 	public get status () { return this._status; }
 	private set status (value) {
 		this._status = new Proxy<SyncStatus>(value, {
 			set: (target, prop, value) => {
-				Object.assign(target, { [prop]: value });
+				Reflect.set(target, prop, value);
 				this.onSyncStatusChanged?.(target);
 				return true;
 			}
@@ -556,13 +561,13 @@ export class SyncController {
 		if (this.status.type == "stop") {
 			debug.log("Sync started");
 			this.status = { type: "idle" };
-			this.syncCycle();
+			void this.syncCycle();
 		} else if (this.status.type == "busy" && this.status.toStop) {
 			this.status.toStop = false;
 		} else if (this.status.type == "idle") {
 			debug.log("Sync started");
-			clearTimeout(this.timeoutId);
-			this.syncCycle();
+			window.clearTimeout(this.timeoutId);
+			void this.syncCycle();
 		}
 	}
 
@@ -576,7 +581,7 @@ export class SyncController {
 			} catch (e) {
 				debug.error(e);
 				this.status = { type: "stop", message: "error" };
-				new Notice(`Sync failed: ${e.message}`);
+				new Notice(`Sync failed: ${(e as Error).message}`);
 			} finally {
 				debug.timeEnd("Sync");
 			}
@@ -587,8 +592,8 @@ export class SyncController {
 					debug.log("Sync stopped");
 				} else {
 					this.status = { type: "idle" };
-					this.timeoutId = setTimeout(() => {
-						this.syncCycle();
+					this.timeoutId = window.setTimeout(() => {
+						void this.syncCycle();
 					}, this.settings.interval);
 				}
 			}
@@ -597,7 +602,7 @@ export class SyncController {
 
 	async stopSyncAsync (): Promise<void> {
 		if (this.status.type == "idle") {
-			clearTimeout(this.timeoutId);
+			window.clearTimeout(this.timeoutId);
 			this.status = { type: "stop" };
 			debug.log("Sync stopped");
 			await Promise.resolve();

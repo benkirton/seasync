@@ -19,6 +19,18 @@ type StoredPassword = { kind: "safe" | "plain"; value: string };
 
 export type StoreBackend = "safe-storage" | "local-storage";
 
+// Node Buffer type, sourced from the global without referencing the bare
+// `Buffer` identifier (node globals are not available in the browser-only
+// lint environment). Buffer.from() returns a Buffer.
+type NodeBuffer = ReturnType<typeof window.Buffer.from>;
+
+// Minimal shape of Electron's safeStorage we rely on.
+interface SafeStorage {
+  isEncryptionAvailable(): boolean;
+  encryptString(plaintext: string): NodeBuffer;
+  decryptString(encrypted: NodeBuffer): string;
+}
+
 export interface PasswordStore {
   readonly backend: StoreBackend
   readonly description: string
@@ -27,18 +39,21 @@ export interface PasswordStore {
   clear: (repoId: string) => Promise<void>
 }
 
-function getSafeStorage (): any | null {
+function getSafeStorage (): SafeStorage | null {
 	if (Platform.isMobile) return null;
 	try {
-		const req = (window as any).require;
+		const req = (window as unknown as { require?: (module: string) => unknown }).require;
 		if (typeof req !== "function") return null;
-		const electron = req("electron");
+		const electron = req("electron") as {
+			safeStorage?: SafeStorage;
+			remote?: { safeStorage?: SafeStorage };
+		};
 		const safe = electron?.safeStorage ?? electron?.remote?.safeStorage;
 		if (safe && typeof safe.isEncryptionAvailable === "function" && safe.isEncryptionAvailable()) {
 			return safe;
 		}
 	} catch {
-		// ignore — fall through to vault-local storage
+		// ignore: fall through to vault-local storage
 	}
 	return null;
 }
@@ -47,10 +62,10 @@ class SafeStoragePasswordStore implements PasswordStore {
 	readonly backend = "safe-storage" as const;
 	readonly description = "Encrypted with your OS keychain. Only your device user can decrypt.";
 
-	constructor (private readonly app: App, private readonly safe: any) {}
+	constructor (private readonly app: App, private readonly safe: SafeStorage) {}
 
 	async save (repoId: string, password: string): Promise<void> {
-		const buf: Buffer = this.safe.encryptString(password);
+		const buf = this.safe.encryptString(password);
 		const entry: StoredPassword = { kind: "safe", value: buf.toString("base64") };
 		this.app.saveLocalStorage(STORAGE_PREFIX + repoId, entry);
 	}
@@ -59,7 +74,7 @@ class SafeStoragePasswordStore implements PasswordStore {
 		const entry = this.app.loadLocalStorage(STORAGE_PREFIX + repoId) as StoredPassword | null;
 		if (!entry || entry.kind !== "safe") return null;
 		try {
-			const buf = Buffer.from(entry.value, "base64");
+			const buf = window.Buffer.from(entry.value, "base64");
 			return this.safe.decryptString(buf);
 		} catch {
 			return null;

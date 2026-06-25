@@ -22,7 +22,7 @@ export default class RepoModal extends Modal {
 			await this.callback({ repoName: repo.repo_name, repoId: repo.repo_id, info });
 		}
 		catch (error) {
-			new Notice("Failed to load repository token. " + error.message);
+			new Notice("Failed to load repository token. " + (error as Error).message);
 			debug.error(error);
 		}
 	}
@@ -52,7 +52,7 @@ export default class RepoModal extends Modal {
 
 		const loading = contentEl.createEl("p", { text: "Loading repositories..." });
 		this.loadRepos(contentEl).then(() => loading.remove()).catch(error => {
-			loading.textContent = "Failed to load repositories. " + error.message;
+			loading.textContent = "Failed to load repositories. " + (error as Error).message;
 			debug.error(error);
 		});
 	}

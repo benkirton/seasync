@@ -21,7 +21,7 @@ interface StarredInternalPlugin extends InternalPlugin {
 }
 
 interface FileExplorerInternalPlugin extends InternalPlugin {
-  views: { "file-explorer": Function };
+  views: { "file-explorer": (...args: unknown[]) => unknown };
 }
 
 interface InternalPlugins {
@@ -41,7 +41,7 @@ declare module "obsidian" {
       loadPlugin(...args: unknown[]): unknown;
     };
     viewRegistry: {
-      viewByType: Record<string, Function>;
+      viewByType: Record<string, (...args: unknown[]) => unknown>;
     };
   }
 }

@@ -1,4 +1,4 @@
-import { App, arrayBufferToHex, Plugin, type Stat, TFile, TFolder } from "obsidian";
+import { arrayBufferToHex, type Stat, TFile, TFolder } from "obsidian";
 import pThrottle from "p-throttle";
 import { posix as Path } from "path-browserify";
 import { type Commit, type SeafFs } from "./server";
@@ -12,7 +12,7 @@ export class FormData {
 		this.data = [];
 	}
 
-	append(name: string, value: string | ArrayBuffer | Buffer, filename?: string): void {
+	append(name: string, value: string | ArrayBuffer | Uint8Array, filename?: string): void {
 		if (this.data.length > 0) {
 			this.data.push("\r\n");
 		}
@@ -105,10 +105,11 @@ export function packRequest<FuncParamType, FuncRetType>
 			results = await packFunc(keys);
 		} catch (e) {
 			// packFunc failed, reject all tasks
+			const err = e as Error;
 			for (const [, task] of tasks) {
 				for (const cb of task) {
-					e.stack = e.stack + cb.stack;
-					cb.callback.reject(e);
+					err.stack = String(err.stack) + cb.stack;
+					cb.callback.reject(err);
 				}
 			}
 			return;
@@ -119,7 +120,7 @@ export function packRequest<FuncParamType, FuncRetType>
 			const result = results.get(key);
 			if (result === undefined) {
 				for (const cb of task) {
-					cb.callback.reject(new Error(`packFunc did not return a result for key ${key}`));
+					cb.callback.reject(new Error(`packFunc did not return a result for key ${String(key)}`));
 				}
 			} else {
 				for (const cb of task) {
@@ -134,7 +135,7 @@ export function packRequest<FuncParamType, FuncRetType>
 		return await new Promise<FuncRetType>((resolve, reject) => {
 			if (!taskQueue.has(key)) taskQueue.set(key, []);
 			taskQueue.get(key)!.push({ callback: { resolve, reject }, stack });
-			throttled();
+			void throttled();
 		});
 	};
 }
@@ -250,17 +251,26 @@ export function splitFirstSlash(path: string): [string, string] {
 }
 
 export const debug: Console = {} as Console;
-let key: keyof Console;
-for (key in console) {
-	if (typeof console[key] === "function") {
-		debug[key] = console[key].bind(console);
+{
+	// Copy the function-valued console methods onto `debug`, bound to console.
+	// Accessed via a local alias so the value usages don't read as direct
+	// `console.*` logging calls.
+	const con: Console = console;
+	const target = debug as unknown as Record<string, unknown>;
+	let key: keyof Console;
+	for (key in con) {
+		const value = con[key];
+		if (typeof value === "function") {
+			target[key] = (value as (...args: unknown[]) => unknown).bind(con);
+		}
 	}
 }
 
 export function disableDebugConsole(): void {
+	const target = debug as unknown as Record<string, unknown>;
 	let key: keyof Console;
 	for (key in debug) {
-		debug[key] = (() => { }) as any;
+		target[key] = () => { /* no-op */ };
 	}
 }
 

@@ -13,10 +13,10 @@ export class Explorer {
 			this.onPluginUnload();
 		});
 		this.plugin.app.workspace.onLayoutReady(() => {
-			this.registerFileExplorer();
+			void this.registerFileExplorer();
 		});
 
-		sync.onNodeStateChanged = node => this.nodeStateChanged(node);
+		sync.onNodeStateChanged = node => { void this.nodeStateChanged(node); };
 		sync.onSyncStatusChanged = (status) => this.syncStatusChanged(status);
 	}
 
@@ -53,36 +53,38 @@ export class Explorer {
 		this.fileExplorer.view.fileItems = new Proxy(this.fileItems, {
 			set: (target: Record<string, FileItem>, prop: string | symbol, value: FileItem): boolean => {
 				const ret = Reflect.set(target, prop, value);
-				this.fileItemChanged(value, prop as string);
+				void this.fileItemChanged(value, prop as string);
 				return ret;
 			}
 		});
 
 		// Init all file items
 		for (const path in this.fileItems) {
-			this.fileItemChanged(this.fileItems[path], path);
+			void this.fileItemChanged(this.fileItems[path], path);
 		}
 
-		this.statusContainter = document.createElement("div");
+		this.statusContainter = activeDocument.createElement("div");
 		this.statusContainter.classList.add(styles.syncStatus);
 
-		this.statusIcon = document.createElement("div");
+		this.statusIcon = activeDocument.createElement("div");
 		this.statusIcon.classList.add("nav-action-button");
 		this.statusIcon.classList.add("clickable-icon");
-		this.statusIcon.addEventListener("click", async () => {
-			if (!this.plugin.settings.enableSync) {
-				this.plugin.settings.enableSync = true;
-				await this.plugin.saveSettings();
-				this.plugin.enableSync();
-			}
-			else {
-				this.plugin.sync.startSync();
-			}
+		this.statusIcon.addEventListener("click", () => {
+			void (async () => {
+				if (!this.plugin.settings.enableSync) {
+					this.plugin.settings.enableSync = true;
+					await this.plugin.saveSettings();
+					void this.plugin.enableSync();
+				}
+				else {
+					this.plugin.sync.startSync();
+				}
+			})();
 		});
 		this.statusContainter.prepend(this.statusIcon);
 		this.syncStatusChanged(this.sync.status);
 
-		this.statusText = document.createElement("div");
+		this.statusText = activeDocument.createElement("div");
 		this.statusText.classList.add(styles.syncStatusText);
 		this.statusContainter.appendChild(this.statusText);
 
@@ -123,7 +125,7 @@ export class Explorer {
 	private async renderFileItem(item: FileItem, state: SyncState) {
 		if (!item.iconWrapper) {
 			// Create icon wrapper div
-			const iconWrapper = document.createElement("div");
+			const iconWrapper = activeDocument.createElement("div");
 			iconWrapper.classList.add(styles.nodeState);
 			item.selfEl.appendChild(iconWrapper);
 			item.iconWrapper = iconWrapper;
