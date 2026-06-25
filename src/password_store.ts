@@ -3,13 +3,19 @@
 // Desktop: stores via Electron's safeStorage (OS keychain: macOS Keychain,
 // libsecret on Linux, DPAPI on Windows). Only the current OS user can decrypt.
 //
-// Mobile: falls back to localStorage in Obsidian's app-private storage. Not
-// encrypted at rest, but on a non-rooted device no other app can read it.
+// Mobile: falls back to Obsidian's vault-local storage. Not encrypted at rest,
+// but on a non-rooted device no other app can read it.
+//
+// Both backends persist through Obsidian's `app.saveLocalStorage` /
+// `app.loadLocalStorage` API. These are device-local and vault-scoped: the
+// password is never written to the plugin's `data.json`, so it does not sync
+// across devices via Seafile.
 
-import { Platform } from "obsidian";
+import { App, Platform } from "obsidian";
 
 const STORAGE_PREFIX = "seafile-continued-pw:";
-const META_PREFIX = "seafile-continued-pw-meta:";
+
+type StoredPassword = { kind: "safe" | "plain"; value: string };
 
 export type StoreBackend = "safe-storage" | "local-storage";
 
@@ -32,7 +38,7 @@ function getSafeStorage (): any | null {
 			return safe;
 		}
 	} catch {
-		// ignore — fall through to localStorage
+		// ignore — fall through to vault-local storage
 	}
 	return null;
 }
@@ -41,20 +47,19 @@ class SafeStoragePasswordStore implements PasswordStore {
 	readonly backend = "safe-storage" as const;
 	readonly description = "Encrypted with your OS keychain. Only your device user can decrypt.";
 
-	constructor (private readonly safe: any) {}
+	constructor (private readonly app: App, private readonly safe: any) {}
 
 	async save (repoId: string, password: string): Promise<void> {
 		const buf: Buffer = this.safe.encryptString(password);
-		localStorage.setItem(STORAGE_PREFIX + repoId, buf.toString("base64"));
-		localStorage.setItem(META_PREFIX + repoId, "safe");
+		const entry: StoredPassword = { kind: "safe", value: buf.toString("base64") };
+		this.app.saveLocalStorage(STORAGE_PREFIX + repoId, entry);
 	}
 
 	async load (repoId: string): Promise<string | null> {
-		const meta = localStorage.getItem(META_PREFIX + repoId);
-		const b64 = localStorage.getItem(STORAGE_PREFIX + repoId);
-		if (!b64 || meta !== "safe") return null;
+		const entry = this.app.loadLocalStorage(STORAGE_PREFIX + repoId) as StoredPassword | null;
+		if (!entry || entry.kind !== "safe") return null;
 		try {
-			const buf = Buffer.from(b64, "base64");
+			const buf = Buffer.from(entry.value, "base64");
 			return this.safe.decryptString(buf);
 		} catch {
 			return null;
@@ -62,8 +67,7 @@ class SafeStoragePasswordStore implements PasswordStore {
 	}
 
 	async clear (repoId: string): Promise<void> {
-		localStorage.removeItem(STORAGE_PREFIX + repoId);
-		localStorage.removeItem(META_PREFIX + repoId);
+		this.app.saveLocalStorage(STORAGE_PREFIX + repoId, null);
 	}
 }
 
@@ -71,27 +75,28 @@ class LocalStoragePasswordStore implements PasswordStore {
 	readonly backend = "local-storage" as const;
 	readonly description = "Stored in Obsidian's app-private storage on this device. Less secure than the desktop keychain.";
 
+	constructor (private readonly app: App) {}
+
 	async save (repoId: string, password: string): Promise<void> {
-		localStorage.setItem(STORAGE_PREFIX + repoId, password);
-		localStorage.setItem(META_PREFIX + repoId, "plain");
+		const entry: StoredPassword = { kind: "plain", value: password };
+		this.app.saveLocalStorage(STORAGE_PREFIX + repoId, entry);
 	}
 
 	async load (repoId: string): Promise<string | null> {
-		const meta = localStorage.getItem(META_PREFIX + repoId);
-		if (meta !== "plain") return null;
-		return localStorage.getItem(STORAGE_PREFIX + repoId);
+		const entry = this.app.loadLocalStorage(STORAGE_PREFIX + repoId) as StoredPassword | null;
+		if (!entry || entry.kind !== "plain") return null;
+		return entry.value;
 	}
 
 	async clear (repoId: string): Promise<void> {
-		localStorage.removeItem(STORAGE_PREFIX + repoId);
-		localStorage.removeItem(META_PREFIX + repoId);
+		this.app.saveLocalStorage(STORAGE_PREFIX + repoId, null);
 	}
 }
 
 let cached: PasswordStore | null = null;
-export function getPasswordStore (): PasswordStore {
+export function getPasswordStore (app: App): PasswordStore {
 	if (cached) return cached;
 	const safe = getSafeStorage();
-	cached = safe ? new SafeStoragePasswordStore(safe) : new LocalStoragePasswordStore();
+	cached = safe ? new SafeStoragePasswordStore(app, safe) : new LocalStoragePasswordStore(app);
 	return cached;
 }

@@ -169,7 +169,7 @@ export default class SeafilePlugin extends Plugin {
 			randomKey: this.settings.randomKey
 		};
 
-		const store = getPasswordStore();
+		const store = getPasswordStore(this.app);
 		const stored = await store.load(this.settings.repoId);
 		if (stored) {
 			try {

@@ -39,7 +39,7 @@ export default class PasswordModal extends Modal {
 				});
 			});
 
-		const store = getPasswordStore();
+		const store = getPasswordStore(this.app);
 		new Setting(contentEl)
 			.setName("Remember on this device")
 			.setDesc(store.description)

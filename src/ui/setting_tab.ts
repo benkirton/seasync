@@ -71,7 +71,7 @@ export class SeafileSettingTab extends PluginSettingTab {
 						settings.repoMagic = "";
 						settings.randomKey = "";
 						server.crypto = null;
-						if (oldRepoId) await getPasswordStore().clear(oldRepoId);
+						if (oldRepoId) await getPasswordStore(this.app).clear(oldRepoId);
 						await this.plugin.saveSettings();
 						accountButton.setButtonText("Log in");
 						accountSetting.setDesc(accountDefaultDesc);
@@ -117,7 +117,7 @@ export class SeafileSettingTab extends PluginSettingTab {
 						settings.repoMagic = "";
 						settings.randomKey = "";
 						server.crypto = null;
-						if (oldRepoId) await getPasswordStore().clear(oldRepoId);
+						if (oldRepoId) await getPasswordStore(this.app).clear(oldRepoId);
 						repoSetting.setDesc(repoDefaultDesc);
 						await this.plugin.saveSettings();
 					}
@@ -151,7 +151,7 @@ export class SeafileSettingTab extends PluginSettingTab {
 								server.crypto = crypto;
 								if (remember) {
 									try {
-										await getPasswordStore().save(repoId, password);
+										await getPasswordStore(this.app).save(repoId, password);
 									} catch (e) {
 										new Notice("Could not save password: " + (e as Error).message);
 										debug.error(e);
@@ -168,7 +168,7 @@ export class SeafileSettingTab extends PluginSettingTab {
 			});
 
 		if (settings.encrypted && settings.repoId) {
-			const store = getPasswordStore();
+			const store = getPasswordStore(this.app);
 			const savedPasswordSetting = new Setting(containerEl)
 				.setName("Saved password")
 				.setDesc("Checking...");

@@ -1,6 +1,6 @@
 {
   "name": "obsidian-seafile-continued",
-  "version": "0.3.12",
+  "version": "0.3.13",
   "description": "Sync notes across devices using Seafile.",
   "main": "src/main.js",
   "scripts": {
