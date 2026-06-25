@@ -28,7 +28,7 @@ export default class LoginModal extends Modal {
 
 	private showMfaField(): void {
 		if (!this.otpSetting) return;
-		this.otpSetting.settingEl.style.display = "";
+		this.otpSetting.settingEl.show();
 		const input = this.otpSetting.settingEl.querySelector("input") as HTMLInputElement | null;
 		if (input) input.focus();
 		this.updateLoginButtonState();
@@ -94,7 +94,7 @@ export default class LoginModal extends Modal {
 					});
 				text.inputEl.autocomplete = "one-time-code";
 			});
-		this.otpSetting.settingEl.style.display = "none";
+		this.otpSetting.settingEl.hide();
 
 		new Setting(contentEl)
 			.addButton(button => {

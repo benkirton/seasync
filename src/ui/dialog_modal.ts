@@ -10,7 +10,7 @@ export default class Dialog extends Modal {
 		contentEl.empty();
 		this.titleEl.textContent = this.title;
 		const p = contentEl.createEl("p", { text: this.message });
-		p.style.whiteSpace = "pre-wrap";
+		p.setCssStyles({ whiteSpace: "pre-wrap" });
 
 		let yesBtn: ButtonComponent, noBtn: ButtonComponent;
 		new Setting(contentEl)
