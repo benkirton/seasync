@@ -83,13 +83,13 @@ export async function verifyPassword (repoId: string, password: string, version:
 
 async function aesCbcDecrypt (key: Uint8Array, iv: Uint8Array, data: Uint8Array): Promise<Uint8Array> {
 	const k = await crypto.subtle.importKey("raw", key, { name: "AES-CBC" }, false, ["decrypt"]);
-	const out = (await crypto.subtle.decrypt({ name: "AES-CBC", iv }, k, data)) as ArrayBuffer;
+	const out = await crypto.subtle.decrypt({ name: "AES-CBC", iv }, k, data);
 	return new Uint8Array(out);
 }
 
 async function aesCbcEncrypt (key: Uint8Array, iv: Uint8Array, data: Uint8Array | ArrayBuffer): Promise<Uint8Array> {
 	const k = await crypto.subtle.importKey("raw", key, { name: "AES-CBC" }, false, ["encrypt"]);
-	const out = (await crypto.subtle.encrypt({ name: "AES-CBC", iv }, k, data)) as ArrayBuffer;
+	const out = await crypto.subtle.encrypt({ name: "AES-CBC", iv }, k, data);
 	return new Uint8Array(out);
 }
 

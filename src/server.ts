@@ -179,8 +179,7 @@ export default class Server {
 		else
 		{
 			// Intentional opt-in alternative to requestUrl, gated by settings.useFetch.
-			// eslint-disable-next-line no-restricted-globals
-			const response = await fetch(req.url, {
+			const response = await window.fetch(req.url, {
 				method: req.method,
 				headers: req.headers,
 				body: req.body,

@@ -1,7 +1,7 @@
 {
 	"id": "seafile-continued",
 	"name": "Seafile Continued",
-	"version": "0.3.15",
+	"version": "0.3.16",
 	"minAppVersion": "1.8.7",
 	"description": "Sync notes across devices using Seafile.",
 	"author": "ryanravn",
