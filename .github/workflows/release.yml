@@ -69,4 +69,5 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ steps.package_version.outputs.VERSION }}
           artifacts: "dist/*"
-          prerelease: true
+          prerelease: false
+          makeLatest: true
