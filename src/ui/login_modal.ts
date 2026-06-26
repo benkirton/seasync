@@ -130,7 +130,50 @@ export default class LoginModal extends Modal {
 					}
 				});
 			})
+			.addButton(button => button.setButtonText("Log in with SSO")
+				.onClick(() => { void this.loginWithSSO(); }))
 			.addButton(button => button.setButtonText("Cancel")
 				.onClick(() => this.close()));
+	}
+
+	// Browser-based SSO login. Opens the Seafile client-SSO link in the system
+	// browser and polls until the user completes authentication, then reuses the
+	// same callback as password login.
+	private async loginWithSSO(): Promise<void> {
+		if (!this.deviceName) {
+			new Notice("Enter a device name first.");
+			return;
+		}
+
+		const notice = new Notice("Starting SSO login...", 0);
+		try {
+			const deviceIdBuffer = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(this.deviceName));
+			const deviceId = arrayBufferToHex(deviceIdBuffer);
+
+			const { link, token } = await server.createClientSSOLink(this.deviceName, deviceId);
+			window.open(link, "_blank");
+			notice.setMessage("Complete the login in your browser, then return to Obsidian...");
+
+			// Poll for up to ~5 minutes (150 attempts, 2s apart).
+			for (let attempt = 0; attempt < 150; attempt++) {
+				await sleep(2000);
+				const result = await server.pollClientSSOLink(token);
+				if (result.apiToken) {
+					await this.callback(result.username ?? "", result.apiToken, this.deviceName, deviceId);
+					notice.hide();
+					new Notice("Logged in via SSO.");
+					this.close();
+					return;
+				}
+				if (result.status && result.status.toLowerCase().includes("error")) {
+					throw new Error("SSO login failed or expired on the server.");
+				}
+			}
+			throw new Error("SSO login timed out.");
+		} catch (error) {
+			notice.hide();
+			new Notice("SSO login failed: " + (error as Error).message);
+			debug.error(error);
+		}
 	}
 }

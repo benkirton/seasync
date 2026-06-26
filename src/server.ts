@@ -291,6 +291,45 @@ export default class Server {
 		return data.token;
 	}
 
+	// Browser-based SSO login (Seafile "client SSO via local browser").
+	// Requires CLIENT_SSO_VIA_LOCAL_BROWSER = True on the server. Works with any
+	// SSO backend the server is configured for (OIDC, SAML, Shibboleth, ...),
+	// because the actual authentication happens in the browser.
+	//
+	// Creates a one-time login link. The device parameters are forwarded so the
+	// server mints a device-bound (v2) token, matching the password login flow.
+	async createClientSSOLink (deviceName: string, deviceId: string): Promise<{ link: string; token: string }> {
+		const params = new URLSearchParams();
+		params.append("platform", "windows");
+		params.append("platform_version", "0");
+		params.append("device_id", deviceId);
+		params.append("device_name", deviceName);
+		params.append("client_version", "obsidian_plugin");
+
+		const resp = await this.sendRequest({
+			url: `${this.settings.host}/api2/client-sso-link/?${params.toString()}`,
+			method: "POST"
+		}) as { link?: string };
+
+		if (!resp.link) throw new Error("Server did not return an SSO login link. Is client SSO enabled?");
+
+		// The poll token is the last path segment of /client-sso/<token>/.
+		const segments = new URL(resp.link).pathname.split("/").filter(Boolean);
+		const token = segments[segments.length - 1];
+		if (!token) throw new Error("Could not parse the SSO token from the login link.");
+
+		return { link: resp.link, token };
+	}
+
+	// Polls a pending SSO login. Returns the api token once the user has
+	// completed login in the browser.
+	async pollClientSSOLink (token: string): Promise<{ status: string; username?: string; apiToken?: string }> {
+		return await this.sendRequest({
+			url: `${this.settings.host}/api2/client-sso-link/${encodeURIComponent(token)}/`,
+			method: "GET"
+		}) as { status: string; username?: string; apiToken?: string };
+	}
+
 	async getRepoList (): Promise<Repo[]> {
 		const resp = await this.sendRequest({
 			url: `${this.settings.host}/api/v2.1/repos/`,
