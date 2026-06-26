@@ -306,10 +306,10 @@ export default class Server {
 		params.append("device_name", deviceName);
 		params.append("client_version", "obsidian_plugin");
 
-		const resp = await this.sendRequest({
-			url: `${this.settings.host}/api2/client-sso-link/?${params.toString()}`,
-			method: "POST"
-		}) as { link?: string };
+		const resp = await this.requestClientSSO(
+			`${this.settings.host}/api2/client-sso-link/?${params.toString()}`,
+			"POST"
+		) as { link?: string };
 
 		if (!resp.link) throw new Error("Server did not return an SSO login link. Is client SSO enabled?");
 
@@ -324,10 +324,38 @@ export default class Server {
 	// Polls a pending SSO login. Returns the api token once the user has
 	// completed login in the browser.
 	async pollClientSSOLink (token: string): Promise<{ status: string; username?: string; apiToken?: string }> {
-		return await this.sendRequest({
-			url: `${this.settings.host}/api2/client-sso-link/${encodeURIComponent(token)}/`,
-			method: "GET"
-		}) as { status: string; username?: string; apiToken?: string };
+		return await this.requestClientSSO(
+			`${this.settings.host}/api2/client-sso-link/${encodeURIComponent(token)}/`,
+			"GET"
+		) as { status: string; username?: string; apiToken?: string };
+	}
+
+	// Low-level request for the client-SSO endpoints. Unlike sendRequest it does
+	// not auto-throw on JSON parse failures: a Seafile server without client SSO
+	// enabled returns an HTML 404 page for these paths, which would otherwise
+	// surface as a confusing "doctype is not valid json" error. Translate the
+	// common failure modes into actionable messages instead.
+	private async requestClientSSO (url: string, method: string): Promise<unknown> {
+		const resp = await this.request({ url, method, throw: false });
+
+		if (resp.status === 404) {
+			throw new Error(
+				"This Seafile server does not support browser SSO login. "
+				+ "Ask the administrator to set CLIENT_SSO_VIA_LOCAL_BROWSER = True in seahub_settings.py."
+			);
+		}
+		if (resp.status < 200 || resp.status >= 300) {
+			throw new Error(`SSO request failed (HTTP ${resp.status}).`);
+		}
+
+		try {
+			return await resp.json();
+		} catch {
+			throw new Error(
+				"The SSO endpoint returned an unexpected (non-JSON) response. "
+				+ "Check that the Host URL is correct and that browser SSO is enabled on the server."
+			);
+		}
 	}
 
 	async getRepoList (): Promise<Repo[]> {
