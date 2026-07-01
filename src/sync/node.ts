@@ -74,7 +74,8 @@ export class SyncNode {
 
 	public static serialize(node: SyncNode): SerializedSyncNode {
 		const children: Record<string, SerializedSyncNode> = {};
-		for (const [name, child] of Object.entries(node.children)) {
+		const entries: [string, SyncNode][] = Object.entries(node.children);
+		for (const [name, child] of entries) {
 			if (child.prev)
 				children[name] = SyncNode.serialize(child);
 		}
@@ -89,7 +90,8 @@ export class SyncNode {
 		node.prev = data.prev ?? undefined;
 		parent?.addChild(node);
 
-		for (const [name, childData] of Object.entries(data.children)) {
+		const childEntries: [string, SerializedSyncNode][] = Object.entries(data.children);
+		for (const [name, childData] of childEntries) {
 			await this.deserialize(name, childData, node);
 		}
 
@@ -111,7 +113,8 @@ export class SyncNode {
 		for (const line of logData) {
 			if (!line.trim()) continue;
 			try {
-				let [path, dirent] = JSON.parse(line) as SerializedLogData;
+				const [rawPath, dirent] = JSON.parse(line) as SerializedLogData;
+				let path = rawPath;
 				while (path.startsWith("/")) path = path.slice(1);
 				const parts = path.split("/");
 				const name = parts.pop()!;
@@ -293,9 +296,9 @@ export class SyncNode {
 		this.state = { "type": "delete" };
 	}
 
-	toJson() {
-		const cjson: Record<string, unknown> = {};
-		Object.entries(this.children).forEach(([name, node]) => {
+	toJson(): DebugJson {
+		const cjson: Record<string, DebugJson> = {};
+		Object.entries(this.children).forEach(([name, node]: [string, SyncNode]) => {
 			cjson[name] = node.toJson();
 		});
 		return {
@@ -307,4 +310,15 @@ export class SyncNode {
 			children: cjson
 		};
 	}
+}
+
+// Debug-only serialization (used by the manual integration test), kept
+// separate from SerializedSyncNode which is the real on-disk format.
+export interface DebugJson {
+	name: string
+	prevDirty: boolean
+	prev?: SeafDirent
+	nextDirty: boolean
+	next?: SeafDirent
+	children: Record<string, DebugJson>
 }

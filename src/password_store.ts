@@ -12,17 +12,27 @@
 // across devices via Seafile.
 
 import { App, Platform } from "obsidian";
+import type { Buffer } from "buffer";
 
 const STORAGE_PREFIX = "seafile-continued-pw:";
 
 type StoredPassword = { kind: "safe" | "plain"; value: string };
 
+// Obsidian's loadLocalStorage() is typed `any | null`, so narrow it through a
+// real type guard instead of a bare `as` cast on an `any` value.
+function isStoredPassword (value: unknown): value is StoredPassword {
+	if (typeof value !== "object" || value === null) return false;
+	const v = value as Record<string, unknown>;
+	return (v.kind === "safe" || v.kind === "plain") && typeof v.value === "string";
+}
+
 export type StoreBackend = "safe-storage" | "local-storage";
 
-// Node Buffer type, sourced from the global without referencing the bare
-// `Buffer` identifier (node globals are not available in the browser-only
-// lint environment). Buffer.from() returns a Buffer.
-type NodeBuffer = ReturnType<typeof window.Buffer.from>;
+// Referenced via `import type` (type-only, erased at compile time) rather
+// than the bare global `Buffer` identifier, since node globals aren't always
+// available in browser-only lint environments; the actual runtime value
+// still comes from Electron's `window.Buffer` below.
+type NodeBuffer = Buffer;
 
 // Minimal shape of Electron's safeStorage we rely on.
 interface SafeStorage {
@@ -71,10 +81,10 @@ class SafeStoragePasswordStore implements PasswordStore {
 	}
 
 	async load (repoId: string): Promise<string | null> {
-		const entry = this.app.loadLocalStorage(STORAGE_PREFIX + repoId) as StoredPassword | null;
-		if (!entry || entry.kind !== "safe") return null;
+		const raw: unknown = this.app.loadLocalStorage(STORAGE_PREFIX + repoId);
+		if (!isStoredPassword(raw) || raw.kind !== "safe") return null;
 		try {
-			const buf = window.Buffer.from(entry.value, "base64");
+			const buf = window.Buffer.from(raw.value, "base64");
 			return this.safe.decryptString(buf);
 		} catch {
 			return null;
@@ -98,9 +108,9 @@ class LocalStoragePasswordStore implements PasswordStore {
 	}
 
 	async load (repoId: string): Promise<string | null> {
-		const entry = this.app.loadLocalStorage(STORAGE_PREFIX + repoId) as StoredPassword | null;
-		if (!entry || entry.kind !== "plain") return null;
-		return entry.value;
+		const raw: unknown = this.app.loadLocalStorage(STORAGE_PREFIX + repoId);
+		if (!isStoredPassword(raw) || raw.kind !== "plain") return null;
+		return raw.value;
 	}
 
 	async clear (repoId: string): Promise<void> {

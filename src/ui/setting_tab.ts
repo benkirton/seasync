@@ -324,7 +324,7 @@ export class SeafileSettingTab extends PluginSettingTab {
 			.setDesc("Delete all local files and data. Try this if you encounter any issues.")
 			.addButton(button => button
 				.setButtonText("Clear")
-				.setWarning()
+				.setDestructive()
 				.onClick(async () => {
 					const success = await this.askClearVault();
 					if (success) {

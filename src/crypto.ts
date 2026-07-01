@@ -81,15 +81,18 @@ export async function verifyPassword (repoId: string, password: string, version:
 	return timingSafeEqualHex(computed, magic);
 }
 
+// SubtleCrypto.decrypt/encrypt are typed `Promise<any>` in TypeScript's own DOM
+// lib (unlike e.g. digest(), which returns `Promise<ArrayBuffer>`) -- cast
+// explicitly so the `any` doesn't leak into callers.
 async function aesCbcDecrypt (key: Uint8Array, iv: Uint8Array, data: Uint8Array): Promise<Uint8Array> {
 	const k = await crypto.subtle.importKey("raw", key, { name: "AES-CBC" }, false, ["decrypt"]);
-	const out = await crypto.subtle.decrypt({ name: "AES-CBC", iv }, k, data);
+	const out = await crypto.subtle.decrypt({ name: "AES-CBC", iv }, k, data) as ArrayBuffer;
 	return new Uint8Array(out);
 }
 
 async function aesCbcEncrypt (key: Uint8Array, iv: Uint8Array, data: Uint8Array | ArrayBuffer): Promise<Uint8Array> {
 	const k = await crypto.subtle.importKey("raw", key, { name: "AES-CBC" }, false, ["encrypt"]);
-	const out = await crypto.subtle.encrypt({ name: "AES-CBC", iv }, k, data);
+	const out = await crypto.subtle.encrypt({ name: "AES-CBC", iv }, k, data) as ArrayBuffer;
 	return new Uint8Array(out);
 }
 

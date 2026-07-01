@@ -144,14 +144,13 @@ export function strcmp(str1: string, str2: string) {
 	return ((str1 == str2) ? 0 : ((str1 > str2) ? 1 : -1));
 }
 
-export async function sha1(data: ArrayBuffer | string) {
+export async function sha1(data: ArrayBuffer | string): Promise<string> {
 	if (typeof data === "string") {
 		data = new TextEncoder().encode(data);
 	}
-	return await crypto.subtle.digest("SHA-1", data).then(hash => {
-		return Array.from(new Uint8Array(hash))
-			.map(b => b.toString(16).padStart(2, "0")).join("");
-	});
+	const hash = await crypto.subtle.digest("SHA-1", data);
+	return Array.from(new Uint8Array(hash))
+		.map((b: number) => b.toString(16).padStart(2, "0")).join("");
 }
 
 export function stringifySeafFs(fs: SeafFs): string {
@@ -175,7 +174,8 @@ export async function computeCommitId(commit: Commit): Promise<string> {
 	const creatorNameBytes = commit.creator_name ? encoder.encode(commit.creator_name + "\0") : new Uint8Array();
 	const descriptionBytes = encoder.encode(commit.description + "\0");
 	const ctimeBytes = new DataView(new ArrayBuffer(8));
-	ctimeBytes.setBigInt64(0, BigInt(commit.ctime), false);
+	const ctime: bigint = BigInt(commit.ctime);
+	ctimeBytes.setBigInt64(0, ctime, false);
 
 	const data = new Uint8Array([
 		...rootIdBytes,

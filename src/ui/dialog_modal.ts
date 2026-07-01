@@ -17,7 +17,7 @@ export default class Dialog extends Modal {
 			.addButton(btn => {
 				yesBtn = btn;
 				btn.setButtonText("Yes");
-				btn.setWarning();
+				btn.setDestructive().setCta();
 				btn.onClick(async () => {
 					yesBtn.setDisabled(true);
 					noBtn.setDisabled(true);

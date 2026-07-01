@@ -6,7 +6,7 @@ import { DEFAULT_IGNORE, HEAD_COMMIT_PATH, SYNC_DATA_PATH, SYNC_DLOG_PATH, serve
 import { MODE_DIR, MODE_FILE, ZeroFs, type DirSeafDirent, type DirSeafFs, type FileSeafDirent, type FileSeafFs, type SeafDirent, type SeafFs } from "../server";
 import * as utils from "../utils";
 import { debug } from "../utils";
-import { SyncNode, type SyncStateChangedListener as NodeStateChangedListener } from "./node";
+import { SyncNode, type STATE_UPLOAD, type SyncStateChangedListener as NodeStateChangedListener } from "./node";
 import { MobileDataAdapter } from "src/@types/obsidian";
 
 export interface NodeChange {
@@ -320,7 +320,7 @@ export class SyncController {
 
 		// Recomputing dirent and fs base on current local folder
 		const mtime = (remote?.mtime) ?? (node?.prev?.mtime);
-		const dirents = [];
+		const dirents: SeafDirent[] = [];
 		for (const child of Object.values(nodeChildren)) {
 			if (child.next) dirents.push(child.next);
 			else if (child.prev) dirents.push(child.prev);
@@ -378,13 +378,13 @@ export class SyncController {
 	}
 
 	async createDirFs (children: SeafDirent[]): Promise<[string, SeafFs | null]> {
-		const count = Object.keys(children).length;
-		if (count === 0) { return [ZeroFs, null]; }
+		if (children.length === 0) { return [ZeroFs, null]; }
 
-		const childrenDirents = Object.values(children);
+		// Copy before sorting: `children` is owned by the caller.
+		const childrenDirents: SeafDirent[] = [...children];
 
-		childrenDirents.sort((a, b) => {
-			return utils.strcmp((b).name, (a).name);
+		childrenDirents.sort((a: SeafDirent, b: SeafDirent) => {
+			return utils.strcmp(b.name, a.name);
 		});
 
 		const fs: DirSeafFs = {
@@ -464,9 +464,11 @@ export class SyncController {
 				throw Error("Node is not in upload state or has no next");
 			}
 
-			const param = (node.state).param;
+			const uploadState: STATE_UPLOAD = node.state;
+			const param = uploadState.param;
 			if (param.blocks) {
-				await Promise.all(Object.entries(param.blocks).map(async ([blockId, block]) => {
+				const blocks: Record<string, ArrayBuffer> = param.blocks;
+				await Promise.all(Object.entries(blocks).map(async ([blockId, block]: [string, ArrayBuffer]) => {
 					if (await server.checkBlock(blockId)) { await server.sendBlock(blockId, block); }
 				}));
 			}

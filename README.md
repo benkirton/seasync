@@ -1,4 +1,4 @@
-# obsidian-seafile-continued
+# Seafile Sync
 
 An [Obsidian](https://obsidian.md/) plugin for synchronizing notes across devices using [Seafile](https://www.seafile.com/), an open-source, self-hosted file sync and share solution.
 

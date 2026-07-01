@@ -191,7 +191,8 @@ export class Explorer {
 	}
 
 	onPluginUnload() {
-		for (const [, item] of Object.entries(this.fileItems)) {
+		const items: [string, FileItem][] = Object.entries(this.fileItems);
+		for (const [, item] of items) {
 			if (item.iconWrapper) {
 				item.iconWrapper.remove();
 				delete item.iconWrapper;
