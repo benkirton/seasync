@@ -154,10 +154,26 @@ export default class LoginModal extends Modal {
 			window.open(link, "_blank");
 			notice.setMessage("Complete the login in your browser, then return to Obsidian...");
 
-			// Poll for up to ~5 minutes (150 attempts, 2s apart).
+			// Poll for up to ~5 minutes (150 attempts, 2s apart). A single transient
+			// network error on one poll (dropped connection, brief server hiccup)
+			// shouldn't abort the whole login attempt -- only give up after several
+			// in a row.
+			const maxConsecutivePollFailures = 5;
+			let consecutivePollFailures = 0;
 			for (let attempt = 0; attempt < 150; attempt++) {
 				await sleep(2000);
-				const result = await server.pollClientSSOLink(token);
+
+				let result;
+				try {
+					result = await server.pollClientSSOLink(token);
+					consecutivePollFailures = 0;
+				} catch (error) {
+					consecutivePollFailures++;
+					if (consecutivePollFailures >= maxConsecutivePollFailures) throw error;
+					debug.warn(`SSO poll attempt failed, retrying (${consecutivePollFailures}/${maxConsecutivePollFailures})`, error);
+					continue;
+				}
+
 				if (result.apiToken) {
 					await this.callback(result.username ?? "", result.apiToken, this.deviceName, deviceId);
 					notice.hide();
