@@ -542,6 +542,15 @@ export class SyncController {
 	}
 
 	private timeoutId: number;
+
+	// Consecutive sync() failures. A single transient error (dropped connection,
+	// server hiccup) should not require the user to notice a Notice and manually
+	// click "resume" -- retry with backoff instead, and only give up for real
+	// after several failures in a row.
+	private consecutiveFailures = 0;
+	private static readonly MAX_CONSECUTIVE_FAILURES = 5;
+	private static readonly MAX_BACKOFF_MS = 5 * 60 * 1000;
+
 	private _status: SyncStatus = { type: "stop" };
 	public get status () { return this._status; }
 	private set status (value) {
@@ -560,6 +569,7 @@ export class SyncController {
 	startSync () {
 		if (this.status.type == "stop") {
 			debug.log("Sync started");
+			this.consecutiveFailures = 0;
 			this.status = { type: "idle" };
 			void this.syncCycle();
 		} else if (this.status.type == "busy" && this.status.toStop) {
@@ -576,12 +586,21 @@ export class SyncController {
 			this.status = { type: "busy" };
 
 			debug.time("Sync");
+			let failed = false;
 			try {
 				await this.sync();
+				this.consecutiveFailures = 0;
 			} catch (e) {
+				failed = true;
+				this.consecutiveFailures++;
 				debug.error(e);
-				this.status = { type: "stop", message: "error" };
-				new Notice(`Sync failed: ${(e as Error).message}`);
+
+				if (this.consecutiveFailures >= SyncController.MAX_CONSECUTIVE_FAILURES) {
+					this.status = { type: "stop", message: "error" };
+					new Notice(`Sync failed after ${this.consecutiveFailures} attempts: ${(e as Error).message}`);
+				} else {
+					debug.warn(`Sync attempt ${this.consecutiveFailures} failed, retrying: ${(e as Error).message}`);
+				}
 			} finally {
 				debug.timeEnd("Sync");
 			}
@@ -592,9 +611,12 @@ export class SyncController {
 					debug.log("Sync stopped");
 				} else {
 					this.status = { type: "idle" };
+					const delay = failed
+						? Math.min(this.settings.interval * (2 ** (this.consecutiveFailures - 1)), SyncController.MAX_BACKOFF_MS)
+						: this.settings.interval;
 					this.timeoutId = window.setTimeout(() => {
 						void this.syncCycle();
-					}, this.settings.interval);
+					}, delay);
 				}
 			}
 		}

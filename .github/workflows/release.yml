@@ -27,6 +27,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Run unit tests
+        # server.test.ts and sync_controller.test.ts are integration tests that
+        # hit a live Seafile server (need src/test/env.ts, gitignored) and are
+        # excluded here; they're for local/manual use only.
+        run: pnpm exec jest --testPathIgnorePatterns='server\.test\.ts' --testPathIgnorePatterns='sync_controller\.test\.ts'
+
       - name: Build project
         run: pnpm run build
 
