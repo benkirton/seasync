@@ -16,14 +16,19 @@ export default class RepoModal extends Modal {
 		super(app);
 	}
 
-	async loadRepoToken(repo: Repo) {
+	// Returns whether the repo was selected successfully, so the caller knows
+	// whether it's safe to close the modal (closing after a failure would
+	// discard the error context and leave the user unable to retry).
+	async loadRepoToken(repo: Repo): Promise<boolean> {
 		try {
 			const info = await server.getRepoDownloadInfo(repo.repo_id);
 			await this.callback({ repoName: repo.repo_name, repoId: repo.repo_id, info });
+			return true;
 		}
 		catch (error) {
 			new Notice("Failed to load repository token. " + (error as Error).message);
 			debug.error(error);
+			return false;
 		}
 	}
 
@@ -36,8 +41,12 @@ export default class RepoModal extends Modal {
 				.setDesc(`Size: ${prettyBytes(repo.size)}. Last modified: ${new Date(repo.last_modified).toLocaleString()}.`)
 				.addButton(button => button.onClick(async () => {
 					button.setDisabled(true);
-					await this.loadRepoToken(repo);
-					this.close();
+					const selected = await this.loadRepoToken(repo);
+					if (selected) {
+						this.close();
+					} else {
+						button.setDisabled(false);
+					}
 				}).setButtonText("Select"));
 		}
 

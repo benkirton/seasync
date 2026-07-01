@@ -205,32 +205,38 @@ export class SeafileSettingTab extends PluginSettingTab {
 				button.setButtonText(settings.enableSync ? "Disable" : "Enable");
 				button.onClick(async () => {
 					button.setDisabled(true);
-					if (settings.enableSync) {
-						// Disable sync
-						await this.plugin.disableSync();
-						new Notice("Sync disabled");
-						button.setButtonText("Enable");
-						enableSyncSetting.setDesc("Disabled");
-					} else {
-						// Enable sync
-						if (this.plugin.checkSyncReady()) {
-							await this.plugin.enableSync();
-							new Notice("Sync enabled");
-							button.setButtonText("Disable");
-							enableSyncSetting.setDesc("Enabled");
+					try {
+						if (settings.enableSync) {
+							// Disable sync
+							await this.plugin.disableSync();
+							new Notice("Sync disabled");
+							button.setButtonText("Enable");
+							enableSyncSetting.setDesc("Disabled");
 						} else {
-							if (settings.authToken) {
-								if (!settings.repoToken) {
-									new Notice("Choose a repository first before enabling sync");
-								} else {
-									new Notice("Sync is not ready");
-								}
+							// Enable sync
+							if (this.plugin.checkSyncReady()) {
+								await this.plugin.enableSync();
+								new Notice("Sync enabled");
+								button.setButtonText("Disable");
+								enableSyncSetting.setDesc("Enabled");
 							} else {
-								new Notice("Log in first before enabling sync");
+								if (settings.authToken) {
+									if (!settings.repoToken) {
+										new Notice("Choose a repository first before enabling sync");
+									} else {
+										new Notice("Sync is not ready");
+									}
+								} else {
+									new Notice("Log in first before enabling sync");
+								}
 							}
 						}
+					} catch (error) {
+						new Notice("Failed to change sync state: " + (error as Error).message);
+						debug.error(error);
+					} finally {
+						button.setDisabled(false);
 					}
-					button.setDisabled(false);
 				});
 			});
 

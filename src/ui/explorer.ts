@@ -13,7 +13,9 @@ export class Explorer {
 			this.onPluginUnload();
 		});
 		this.plugin.app.workspace.onLayoutReady(() => {
-			void this.registerFileExplorer();
+			this.registerFileExplorer().catch(error => {
+				debug.error("Failed to hook into the file explorer; sync status icon and file badges will not be shown", error);
+			});
 		});
 
 		sync.onNodeStateChanged = node => { void this.nodeStateChanged(node); };
@@ -195,7 +197,11 @@ export class Explorer {
 				delete item.iconWrapper;
 			}
 		}
-		this.fileExplorer.view.fileItems = this.fileItems;
+		// registerFileExplorer() may not have completed (still waiting on
+		// onLayoutReady, or it failed to find a file-explorer leaf).
+		if (this.fileExplorer) {
+			this.fileExplorer.view.fileItems = this.fileItems;
+		}
 
 		if (this.statusContainter) {
 			this.statusContainter.remove();
