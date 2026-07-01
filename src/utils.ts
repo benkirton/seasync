@@ -145,10 +145,8 @@ export function strcmp(str1: string, str2: string) {
 }
 
 export async function sha1(data: ArrayBuffer | string): Promise<string> {
-	if (typeof data === "string") {
-		data = new TextEncoder().encode(data);
-	}
-	const hash = await crypto.subtle.digest("SHA-1", data);
+	const bytes: BufferSource = typeof data === "string" ? new TextEncoder().encode(data) : data;
+	const hash = await crypto.subtle.digest("SHA-1", bytes);
 	return Array.from(new Uint8Array(hash))
 		.map((b: number) => b.toString(16).padStart(2, "0")).join("");
 }
@@ -236,7 +234,7 @@ export async function arrayBufferToBase64(buffer: ArrayBuffer): Promise<string> 
 	});
 }
 
-export function concatTypedArrays(a: Uint8Array, b: Uint8Array): Uint8Array {
+export function concatTypedArrays(a: Uint8Array<ArrayBuffer>, b: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
 	const result = new Uint8Array(a.length + b.length);
 	result.set(a, 0);
 	result.set(b, a.length);

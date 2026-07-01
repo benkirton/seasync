@@ -12,7 +12,6 @@
 // across devices via Seafile.
 
 import { App, Platform } from "obsidian";
-import type { Buffer } from "buffer";
 
 const STORAGE_PREFIX = "seafile-continued-pw:";
 
@@ -28,11 +27,19 @@ function isStoredPassword (value: unknown): value is StoredPassword {
 
 export type StoreBackend = "safe-storage" | "local-storage";
 
-// Referenced via `import type` (type-only, erased at compile time) rather
-// than the bare global `Buffer` identifier, since node globals aren't always
-// available in browser-only lint environments; the actual runtime value
-// still comes from Electron's `window.Buffer` below.
-type NodeBuffer = Buffer;
+// Minimal Buffer-like shape needed here. Deliberately not importing Node's
+// "buffer" module or referencing the global `Buffer` identifier: Obsidian
+// plugin guidelines disallow Node builtins, and this whole code path is
+// desktop-only already (gated by Platform.isMobile in getSafeStorage()).
+interface NodeBuffer {
+	toString(encoding: string): string;
+}
+
+// Electron exposes Buffer on the renderer's `window`; typed by hand for the
+// same reason as NodeBuffer above, rather than relying on ambient Node types.
+interface WindowBuffer {
+	from(data: string, encoding: string): NodeBuffer;
+}
 
 // Minimal shape of Electron's safeStorage we rely on.
 interface SafeStorage {
@@ -84,7 +91,8 @@ class SafeStoragePasswordStore implements PasswordStore {
 		const raw: unknown = this.app.loadLocalStorage(STORAGE_PREFIX + repoId);
 		if (!isStoredPassword(raw) || raw.kind !== "safe") return null;
 		try {
-			const buf = window.Buffer.from(raw.value, "base64");
+			const bufferCtor = (window as unknown as { Buffer: WindowBuffer }).Buffer;
+			const buf = bufferCtor.from(raw.value, "base64");
 			return this.safe.decryptString(buf);
 		} catch {
 			return null;

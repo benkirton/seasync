@@ -5,6 +5,12 @@
 // v4: per-repo random 32-byte salt (hex-encoded on the wire).
 // Both use PBKDF2-HMAC-SHA256 + AES-256-CBC (PKCS7).
 
+// TypeScript's Uint8Array is generic over its backing buffer (ArrayBuffer vs
+// the wider ArrayBufferLike, which also covers SharedArrayBuffer). The Web
+// Crypto APIs below require BufferSource/ArrayBufferView<ArrayBuffer>, so
+// pin everything here to a plain-ArrayBuffer-backed view.
+type Bytes = Uint8Array<ArrayBuffer>;
+
 const FIXED_SALT_V2 = new Uint8Array([0xda, 0x90, 0x45, 0xc3, 0x06, 0xc7, 0xcc, 0x26]);
 
 export class UnsupportedEncVersionError extends Error {
@@ -17,7 +23,7 @@ export class WrongPasswordError extends Error {
 	constructor () { super("Incorrect repository password."); }
 }
 
-function hexToBytes (hex: string): Uint8Array {
+function hexToBytes (hex: string): Bytes {
 	if (hex.length % 2 !== 0) throw new Error("Invalid hex string");
 	const out = new Uint8Array(hex.length / 2);
 	for (let i = 0; i < out.length; i++) {
@@ -40,7 +46,7 @@ function timingSafeEqualHex (a: string, b: string): boolean {
 	return diff === 0;
 }
 
-function saltForVersion (version: number, repoSalt: string): Uint8Array {
+function saltForVersion (version: number, repoSalt: string): Bytes {
 	if (version === 2) return FIXED_SALT_V2;
 	if (version === 4) {
 		if (!repoSalt) throw new Error("v4 encryption requires repo_salt");
@@ -49,7 +55,7 @@ function saltForVersion (version: number, repoSalt: string): Uint8Array {
 	throw new UnsupportedEncVersionError(version);
 }
 
-async function pbkdf2 (data: Uint8Array, salt: Uint8Array, iterations: number, bits: number): Promise<Uint8Array> {
+async function pbkdf2 (data: Bytes, salt: Bytes, iterations: number, bits: number): Promise<Bytes> {
 	const baseKey = await crypto.subtle.importKey("raw", data, { name: "PBKDF2" }, false, ["deriveBits"]);
 	const derived = await crypto.subtle.deriveBits(
 		{ name: "PBKDF2", salt, iterations, hash: "SHA-256" },
@@ -62,7 +68,7 @@ async function pbkdf2 (data: Uint8Array, salt: Uint8Array, iterations: number, b
 // Two-step derivation matches seafile_derive_key for v >= 2:
 //   key = PBKDF2(data, salt, 1000, 32 bytes)
 //   iv  = PBKDF2(key,  salt, 10,   16 bytes)
-async function deriveKeyIv (data: Uint8Array, version: number, repoSalt: string): Promise<{ key: Uint8Array, iv: Uint8Array }> {
+async function deriveKeyIv (data: Bytes, version: number, repoSalt: string): Promise<{ key: Bytes, iv: Bytes }> {
 	const salt = saltForVersion(version, repoSalt);
 	const key = await pbkdf2(data, salt, 1000, 32 * 8);
 	const iv = await pbkdf2(key, salt, 10, 16 * 8);
@@ -81,31 +87,28 @@ export async function verifyPassword (repoId: string, password: string, version:
 	return timingSafeEqualHex(computed, magic);
 }
 
-// SubtleCrypto.decrypt/encrypt are typed `Promise<any>` in TypeScript's own DOM
-// lib (unlike e.g. digest(), which returns `Promise<ArrayBuffer>`) -- cast
-// explicitly so the `any` doesn't leak into callers.
-async function aesCbcDecrypt (key: Uint8Array, iv: Uint8Array, data: Uint8Array): Promise<Uint8Array> {
+async function aesCbcDecrypt (key: Bytes, iv: Bytes, data: Bytes): Promise<Bytes> {
 	const k = await crypto.subtle.importKey("raw", key, { name: "AES-CBC" }, false, ["decrypt"]);
-	const out = await crypto.subtle.decrypt({ name: "AES-CBC", iv }, k, data) as ArrayBuffer;
+	const out = await crypto.subtle.decrypt({ name: "AES-CBC", iv }, k, data);
 	return new Uint8Array(out);
 }
 
-async function aesCbcEncrypt (key: Uint8Array, iv: Uint8Array, data: Uint8Array | ArrayBuffer): Promise<Uint8Array> {
+async function aesCbcEncrypt (key: Bytes, iv: Bytes, data: Bytes | ArrayBuffer): Promise<Bytes> {
 	const k = await crypto.subtle.importKey("raw", key, { name: "AES-CBC" }, false, ["encrypt"]);
-	const out = await crypto.subtle.encrypt({ name: "AES-CBC", iv }, k, data) as ArrayBuffer;
+	const out = await crypto.subtle.encrypt({ name: "AES-CBC", iv }, k, data);
 	return new Uint8Array(out);
 }
 
 // Unwrap the random_key (48 hex bytes wrapped) using the password-derived key/iv,
 // then derive the actual block-encryption (encKey, encIV) from the unwrapped 32-byte secret.
-async function deriveBlockKeys (password: string, randomKeyHex: string, version: number, repoSalt: string): Promise<{ encKey: Uint8Array, encIv: Uint8Array }> {
+async function deriveBlockKeys (password: string, randomKeyHex: string, version: number, repoSalt: string): Promise<{ encKey: Bytes, encIv: Bytes }> {
 	const passData = new TextEncoder().encode(password);
 	const { key: pwKey, iv: pwIv } = await deriveKeyIv(passData, version, repoSalt);
 
 	const wrapped = hexToBytes(randomKeyHex);
 	if (wrapped.length !== 48) throw new Error(`Unexpected random_key length ${wrapped.length}, expected 48`);
 
-	let secret: Uint8Array;
+	let secret: Bytes;
 	try {
 		secret = await aesCbcDecrypt(pwKey, pwIv, wrapped);
 	} catch {
@@ -126,8 +129,8 @@ export interface RepoCryptoMetadata {
 }
 
 export class RepoCrypto {
-	private encKey?: Uint8Array;
-	private encIv?: Uint8Array;
+	private encKey?: Bytes;
+	private encIv?: Bytes;
 
 	private constructor (public readonly meta: RepoCryptoMetadata) {
 		if (meta.encVersion !== 2 && meta.encVersion !== 4) {

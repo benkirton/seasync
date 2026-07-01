@@ -1,6 +1,6 @@
 {
   "name": "obsidian-seafile-continued",
-  "version": "0.3.20",
+  "version": "0.3.21",
   "description": "Sync notes across devices using Seafile.",
   "main": "src/main.js",
   "scripts": {
@@ -31,7 +31,7 @@
     "obsidian": "^1.13.1",
     "ts-jest": "^29.1.2",
     "tslib": "2.4.0",
-    "typescript": "4.7.4",
+    "typescript": "^5.9.3",
     "typescript-plugin-css-modules": "^5.1.0"
   },
   "dependencies": {
