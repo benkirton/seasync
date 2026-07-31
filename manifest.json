@@ -1,7 +1,7 @@
 {
 	"id": "seasync",
 	"name": "SeaSync",
-	"version": "0.5.0",
+	"version": "0.6.0",
 	"minAppVersion": "1.13.0",
 	"description": "Sync notes across devices using Seafile.",
 	"author": "benkirton",
