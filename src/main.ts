@@ -23,6 +23,7 @@ export default class SeafilePlugin extends Plugin {
 		initConfig(this.app, this.server, this.manifest.id);
 
 		this.sync = new SyncController(this.app.vault.adapter, this.settings);
+		this.sync.onAuthFailure = () => { this.handleAuthFailure(); };
 		this.explorerView = new Explorer(this, this.sync);
 
 		this.registerEvent(this.app.vault.on("create", (file) => {
@@ -79,6 +80,13 @@ export default class SeafilePlugin extends Plugin {
 			// otherwise Obsidian shows "loading" until the user types the password.
 			void this.enableSync();
 		}
+	}
+
+	private handleAuthFailure(): void {
+		new Notice(
+			"Seafile: your login has expired or was revoked. Sync has stopped -- open the Seafile plugin settings and log in again to resume.",
+			0
+		);
 	}
 
 	async disableSync(): Promise<void> {

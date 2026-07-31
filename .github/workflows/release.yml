@@ -16,25 +16,17 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-
-      - name: Install pnpm
-        run: npm install -g pnpm
+      - name: Setup mise
+        uses: jdx/mise-action@v2
 
       - name: Install dependencies
-        run: pnpm install
+        run: bun install --frozen-lockfile
 
       - name: Run unit tests
-        # server.test.ts and sync_controller.test.ts are integration tests that
-        # hit a live Seafile server (need src/test/env.ts, gitignored) and are
-        # excluded here; they're for local/manual use only.
-        run: pnpm exec jest --testPathIgnorePatterns='server\.test\.ts' --testPathIgnorePatterns='sync_controller\.test\.ts'
+        run: bun test
 
       - name: Build project
-        run: pnpm run build
+        run: bun run build
 
       - name: Generate artifact attestations
         uses: actions/attest-build-provenance@v1

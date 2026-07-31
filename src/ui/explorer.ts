@@ -181,6 +181,9 @@ export class Explorer {
 			if (status.message == "error") {
 				this.setStatus("alert-circle", "Error");
 			}
+			else if (status.message == "auth") {
+				this.setStatus("key", "Login expired -- see plugin settings");
+			}
 			else {
 				this.setStatus("refresh-cw-off", "Sync stopped");
 			}

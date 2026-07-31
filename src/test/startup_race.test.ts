@@ -1,4 +1,4 @@
-import { describe, expect, test } from "@jest/globals";
+import { describe, expect, test } from "bun:test";
 import { initConfig } from "../config";
 import { MODE_FILE } from "../server";
 import { SyncController, type NodeChange } from "../sync/controller";

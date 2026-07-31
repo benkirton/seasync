@@ -16,6 +16,7 @@
       "DOM",
       "ES2020"
     ],
+    "types": [],
     "plugins": [
       {
         "name": "typescript-plugin-css-modules",
@@ -29,6 +30,6 @@
     "src"
   ],
   "exclude": [
-    "**/*.test.ts"
+    "src/test"
   ]
 }

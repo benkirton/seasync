@@ -55,8 +55,8 @@ const context = await esbuild.context({
 			setup(build) {
 				let appSettings = {};
 				build.onStart(() => {
-					if (fs.existsSync("vault/.obsidian/plugins/seafile-continued/data.json"))
-						appSettings = JSON.parse(fs.readFileSync("vault/.obsidian/plugins/seafile-continued/data.json", "utf-8"));
+					if (fs.existsSync("vault/.obsidian/plugins/seasync/data.json"))
+						appSettings = JSON.parse(fs.readFileSync("vault/.obsidian/plugins/seasync/data.json", "utf-8"));
 					fs.rmSync("dist", { recursive: true, force: true });
 				});
 				build.onEnd(async () => {
@@ -72,7 +72,7 @@ const context = await esbuild.context({
 					fs.copyFileSync("manifest.json", "dist/manifest.json");
 
 					// Copy dist folder to test vault
-					const testVaultPath = "vault/.obsidian/plugins/seafile-continued";
+					const testVaultPath = "vault/.obsidian/plugins/seasync";
 					// if (fs.existsSync(testVaultPath))
 					// fs.rmSync(testVaultPath, { recursive: true, force: true });
 					fs.mkdirSync(testVaultPath, { recursive: true });

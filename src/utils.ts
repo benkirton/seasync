@@ -241,6 +241,21 @@ export function concatTypedArrays(a: Uint8Array<ArrayBuffer>, b: Uint8Array<Arra
 	return result;
 }
 
+// Name for the losing side of a sync conflict, preserved instead of silently
+// discarded. Mirrors the "(conflicted copy ...)" convention used by Dropbox/
+// iCloud Drive so it reads as familiar rather than as plugin debris.
+export function buildConflictedCopyPath(path: string, when: Date = new Date()): string {
+	const slash = path.lastIndexOf("/");
+	const dir = slash === -1 ? "" : path.slice(0, slash);
+	const filename = slash === -1 ? path : path.slice(slash + 1);
+	const dot = filename.lastIndexOf(".");
+	const base = dot > 0 ? filename.slice(0, dot) : filename;
+	const ext = dot > 0 ? filename.slice(dot) : "";
+	const stamp = when.toISOString().replace(/[:.]/g, "-");
+	const name = `${base} (conflicted copy ${stamp})${ext}`;
+	return dir ? `${dir}/${name}` : name;
+}
+
 export function splitFirstSlash(path: string): [string, string] {
 	const firstSlash = path.indexOf("/");
 	if (firstSlash === -1) return [path, ""];

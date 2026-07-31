@@ -3,7 +3,7 @@ import { posix as Path } from "path-browserify";
 import { Notice, Platform, type DataAdapter } from "obsidian";
 import { type SeafileSettings } from "src/settings";
 import { DEFAULT_IGNORE, HEAD_COMMIT_PATH, SYNC_DATA_PATH, SYNC_DLOG_PATH, server } from "../config";
-import { MODE_DIR, MODE_FILE, ZeroFs, type DirSeafDirent, type DirSeafFs, type FileSeafDirent, type FileSeafFs, type SeafDirent, type SeafFs } from "../server";
+import { AuthError, MODE_DIR, MODE_FILE, ZeroFs, type DirSeafDirent, type DirSeafFs, type FileSeafDirent, type FileSeafFs, type SeafDirent, type SeafFs } from "../server";
 import * as utils from "../utils";
 import { debug } from "../utils";
 import { SyncNode, type STATE_UPLOAD, type SyncStateChangedListener as NodeStateChangedListener } from "./node";
@@ -26,7 +26,7 @@ export interface SYNC_BUSY {
 
 export interface SYNC_STOP {
   type: "stop"
-  message?: "error" | "user"
+  message?: "error" | "user" | "auth"
 }
 
 export type SyncStatus = SYNC_IDLE | SYNC_BUSY | SYNC_STOP
@@ -117,6 +117,36 @@ export class SyncController {
 		this.onNodeStateChanged?.(node);
 	}
 
+	// Preserve the local side of a conflict before it gets overwritten by the
+	// remote download. The copy is a brand new, untracked local file, so the
+	// normal fastList-based scan picks it up as a plain local addition on the
+	// next sync cycle and uploads it like anything else.
+	private async saveLocalConflictCopy (path: string): Promise<void> {
+		const conflictPath = utils.buildConflictedCopyPath(path);
+		await this.adapter.copy(path, conflictPath);
+	}
+
+	// Preserve the remote side of a conflict before it gets overwritten by the
+	// local upload. Fetches the full file in one shot rather than the desktop/
+	// mobile append dance in downloadFile() -- conflicts are rare, so simplicity
+	// wins over streaming here.
+	private async saveRemoteConflictCopy (path: string, remote: FileSeafDirent): Promise<void> {
+		const conflictPath = utils.buildConflictedCopyPath(path);
+		if (remote.id === ZeroFs) {
+			await this.adapter.write(conflictPath, "", { mtime: remote.mtime * 1000 });
+			return;
+		}
+
+		const [, fs] = await server.getFs(remote.id);
+		let bytes = new Uint8Array();
+		for (const blockId of (fs as FileSeafFs).block_ids) {
+			const block = await server.getBlock(blockId);
+			bytes = utils.concatTypedArrays(bytes, new Uint8Array(block));
+		}
+		const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+		await this.adapter.writeBinary(conflictPath, buffer, { mtime: remote.mtime * 1000 });
+	}
+
 	public async pull (changes: NodeChange[], path: string, node: SyncNode, remote?: SeafDirent) {
 		// Step 0. Check ignore pattern
 		if (this.ignore.denies(path)) {
@@ -191,10 +221,31 @@ export class SyncController {
 			if (local && !remote) target = "local";
 			else if (!local && remote) target = "remote";
 			else {
-				// Take the newer one
-				if (Math.floor(local!.mtime / 1000) > remote!.mtime) target = "local";
-				else {
-					target = "remote";
+				// Both sides changed since the last sync. Take the newer one, but
+				// don't just discard the loser -- keep it as a "conflicted copy" so
+				// a concurrent edit on two devices doesn't silently lose one side.
+				const localNewer = Math.floor(local!.mtime / 1000) > remote!.mtime;
+				target = localNewer ? "local" : "remote";
+
+				const bothFiles = local!.type === "file" && remote!.mode === MODE_FILE;
+				if (bothFiles) {
+					if (localNewer) {
+						await this.saveRemoteConflictCopy(path, remote as FileSeafDirent);
+					} else {
+						await this.saveLocalConflictCopy(path);
+					}
+					new Notice(`Seafile: conflicting edits at "${path}". Kept the newer version and saved the other as a conflicted copy.`);
+				} else {
+					// A file/folder type mismatch (e.g. one device deleted a folder and
+					// created a same-named file). Rarer, and recursively snapshotting a
+					// whole folder tree isn't implemented -- at least warn instead of
+					// silently dropping it.
+					const discardedSide = localNewer ? "remote" : "local";
+					const discardedKind = localNewer ? (remote!.mode == MODE_FILE ? "file" : "folder") : local!.type;
+					new Notice(`Seafile: conflict at "${path}" (${discardedSide} ${discardedKind} vs. the other side's different type). Kept the newer item; the ${discardedSide} ${discardedKind} could not be preserved and was discarded.`);
+				}
+
+				if (target == "remote") {
 					if (local!.type == "file") { await this.adapter.remove(path); } else { await this.adapter.rmdir(path, true); }
 				}
 			}
@@ -568,6 +619,12 @@ export class SyncController {
 
 	public onSyncStatusChanged: ((status: SyncStatus) => void) | null = null;
 
+	// Fired when a sync attempt is stopped specifically because the server
+	// rejected the auth/repo token (401/403), as opposed to a generic/transient
+	// failure. Separate from onSyncStatusChanged (owned by the explorer UI) so
+	// main.ts can prompt the user to log in again without clobbering it.
+	public onAuthFailure: (() => void) | null = null;
+
 	startSync () {
 		if (this.status.type == "stop") {
 			debug.log("Sync started");
@@ -594,14 +651,23 @@ export class SyncController {
 				this.consecutiveFailures = 0;
 			} catch (e) {
 				failed = true;
-				this.consecutiveFailures++;
 				debug.error(e);
 
-				if (this.consecutiveFailures >= SyncController.MAX_CONSECUTIVE_FAILURES) {
-					this.status = { type: "stop", message: "error" };
-					new Notice(`Sync failed after ${this.consecutiveFailures} attempts: ${(e as Error).message}`);
+				if (e instanceof AuthError) {
+					// Retrying with the same rejected token won't help -- stop now
+					// instead of burning through the backoff budget, and let main.ts
+					// prompt the user to log in again.
+					this.status = { type: "stop", message: "auth" };
+					this.onAuthFailure?.();
 				} else {
-					debug.warn(`Sync attempt ${this.consecutiveFailures} failed, retrying: ${(e as Error).message}`);
+					this.consecutiveFailures++;
+
+					if (this.consecutiveFailures >= SyncController.MAX_CONSECUTIVE_FAILURES) {
+						this.status = { type: "stop", message: "error" };
+						new Notice(`Sync failed after ${this.consecutiveFailures} attempts: ${(e as Error).message}`);
+					} else {
+						debug.warn(`Sync attempt ${this.consecutiveFailures} failed, retrying: ${(e as Error).message}`);
+					}
 				}
 			} finally {
 				debug.timeEnd("Sync");

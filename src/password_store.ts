@@ -13,7 +13,7 @@
 
 import { App, Platform } from "obsidian";
 
-const STORAGE_PREFIX = "seafile-continued-pw:";
+const STORAGE_PREFIX = "seasync-pw:";
 
 type StoredPassword = { kind: "safe" | "plain"; value: string };
 

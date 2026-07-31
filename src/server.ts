@@ -148,6 +148,16 @@ export class MfaRequiredError extends Error {
 	}
 }
 
+// Thrown for 401/403 responses from an authenticated sync request (as opposed
+// to the login endpoints, which have their own error handling). Distinct from
+// a generic HTTP error so callers can stop retrying immediately and prompt the
+// user to log in again instead of burning through the backoff/retry budget.
+export class AuthError extends Error {
+	constructor(status: number) {
+		super(`Authentication failed (HTTP ${status}). The login token may have expired or been revoked.`);
+	}
+}
+
 export interface RepoDownloadInfo {
   token: string
   encrypted: boolean
@@ -215,6 +225,9 @@ export default class Server {
 		}
 
 		if (!status.startsWith("2") && !status.startsWith("3")) {
+			if (resp.status === 401 || resp.status === 403) {
+				throw new AuthError(resp.status);
+			}
 			throw new Error(`HTTP ${status}. Response: ${JSON.stringify(ret)}`);
 		}
 
@@ -573,7 +586,7 @@ export default class Server {
 			repo_name: this.settings.repoName,
 			repo_desc: "",
 			device_name: this.settings.deviceName,
-			client_version: `obsidian-seafile_${this.plugin.manifest.version}`,
+			client_version: `seasync_${this.plugin.manifest.version}`,
 			version: 1
 		};
 
