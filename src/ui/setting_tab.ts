@@ -3,10 +3,11 @@ import type SeafilePlugin from "src/main";
 import { debug } from "src/utils";
 import { server } from "src/config";
 import { getPasswordStore } from "src/password_store";
+import { writeRepoConfigFile, REPO_CONFIG_FILENAME } from "src/repo_config";
 import Dialog from "./dialog_modal";
 import LoginModal from "./login_modal";
 import PasswordModal from "./password_modal";
-import RepoModal from "./repo_modal";
+import RepoModal, { type SelectedRepo } from "./repo_modal";
 
 export class SeafileSettingTab extends PluginSettingTab {
 	constructor(public app: App, private readonly plugin: SeafilePlugin) {
@@ -42,6 +43,59 @@ export class SeafileSettingTab extends PluginSettingTab {
 					hostText.setValue(settings.host);
 				})
 			);
+
+		// Declared here (before the Account/login UI below) so a successful
+		// login can auto-complete repo binding when settings.repoId was already
+		// pre-filled from a .seasync file, without the user having to open
+		// RepoModal and browse. Assigned once the Repository Setting row below
+		// is actually created; safe because bindRepo is only ever invoked from
+		// async callbacks that run after display() has finished executing.
+		let repoSetting!: Setting;
+		const repoDefaultDesc = "Choose a repository to sync.";
+		const bindRepo = async ({ repoName, repoId, info }: SelectedRepo): Promise<void> => {
+			const applyAndStart = async () => {
+				settings.repoName = repoName;
+				settings.repoId = repoId;
+				settings.repoToken = info.token;
+				settings.encrypted = info.encrypted;
+				settings.encVersion = info.enc_version;
+				settings.repoSalt = info.salt;
+				settings.repoMagic = info.magic;
+				settings.randomKey = info.random_key;
+				repoSetting.setDesc(repoName);
+				await this.plugin.saveSettings();
+				if (settings.enableSync) this.plugin.sync.startSync();
+			};
+
+			if (info.encrypted) {
+				if (info.enc_version !== 2 && info.enc_version !== 4) {
+					new Notice(`Encryption version ${info.enc_version} is not supported. Only v2 and v4 work.`);
+					return;
+				}
+				new PasswordModal(this.app, {
+					repoId,
+					encVersion: info.enc_version,
+					repoSalt: info.salt,
+					magic: info.magic,
+					randomKey: info.random_key
+				}, async (crypto, password, remember) => {
+					server.crypto = crypto;
+					if (remember) {
+						try {
+							await getPasswordStore(this.app).save(repoId, password);
+						} catch (e) {
+							new Notice("Could not save password: " + (e as Error).message);
+							debug.error(e);
+						}
+					}
+					await applyAndStart();
+				}).open();
+			} else {
+				server.crypto = null;
+				await applyAndStart();
+			}
+		};
+
 		const accountDefaultDesc = "Not logged in.";
 		let accountButton: ButtonComponent;
 		const accountSetting = new Setting(containerEl)
@@ -87,13 +141,25 @@ export class SeafileSettingTab extends PluginSettingTab {
 
 							accountButton.setButtonText("Log out");
 							accountSetting.setDesc(account);
+
+							// A .seasync file already pre-filled which repo to use --
+							// finish binding it now instead of making the user browse
+							// and re-pick it from RepoModal.
+							if (settings.repoId && !settings.repoToken) {
+								try {
+									const info = await server.getRepoDownloadInfo(settings.repoId);
+									await bindRepo({ repoName: settings.repoName || settings.repoId, repoId: settings.repoId, info });
+								} catch (e) {
+									new Notice(`Could not auto-configure the repo from ${REPO_CONFIG_FILENAME}: ` + (e as Error).message + ". Choose it manually below.");
+									debug.error(e);
+								}
+							}
 						}).open();
 					}
 				});
 			});
 
-		const repoDefaultDesc = "Choose a repository to sync.";
-		const repoSetting = new Setting(containerEl)
+		repoSetting = new Setting(containerEl)
 			.setName("Repository")
 			.setDesc(settings.repoName ? settings.repoName : repoDefaultDesc)
 			.addButton(button => {
@@ -121,51 +187,29 @@ export class SeafileSettingTab extends PluginSettingTab {
 						repoSetting.setDesc(repoDefaultDesc);
 						await this.plugin.saveSettings();
 					}
-					new RepoModal(this.app, async ({ repoName, repoId, info }) => {
-						const applyAndStart = async () => {
-							settings.repoName = repoName;
-							settings.repoId = repoId;
-							settings.repoToken = info.token;
-							settings.encrypted = info.encrypted;
-							settings.encVersion = info.enc_version;
-							settings.repoSalt = info.salt;
-							settings.repoMagic = info.magic;
-							settings.randomKey = info.random_key;
-							repoSetting.setDesc(repoName);
-							await this.plugin.saveSettings();
-							if (settings.enableSync) this.plugin.sync.startSync();
-						};
-
-						if (info.encrypted) {
-							if (info.enc_version !== 2 && info.enc_version !== 4) {
-								new Notice(`Encryption version ${info.enc_version} is not supported. Only v2 and v4 work.`);
-								return;
-							}
-							new PasswordModal(this.app, {
-								repoId,
-								encVersion: info.enc_version,
-								repoSalt: info.salt,
-								magic: info.magic,
-								randomKey: info.random_key
-							}, async (crypto, password, remember) => {
-								server.crypto = crypto;
-								if (remember) {
-									try {
-										await getPasswordStore(this.app).save(repoId, password);
-									} catch (e) {
-										new Notice("Could not save password: " + (e as Error).message);
-										debug.error(e);
-									}
-								}
-								await applyAndStart();
-							}).open();
-						} else {
-							server.crypto = null;
-							await applyAndStart();
-						}
-					}).open();
+					new RepoModal(this.app, bindRepo).open();
 				});
 			});
+
+		new Setting(containerEl)
+			.setName("Repo config file")
+			.setDesc(`Write ${REPO_CONFIG_FILENAME} to the vault so a new device/vault pointed at this vault's files can skip re-entering the server and repo (login is still required). Contains no credentials.`)
+			.addButton(button => button
+				.setButtonText("Export")
+				.onClick(async () => {
+					if (!settings.repoId) {
+						new Notice("Choose a repository first");
+						return;
+					}
+					try {
+						await writeRepoConfigFile(this.app.vault.adapter, settings);
+						new Notice(`Wrote ${REPO_CONFIG_FILENAME}`);
+					} catch (e) {
+						new Notice(`Failed to write ${REPO_CONFIG_FILENAME}: ` + (e as Error).message);
+						debug.error(e);
+					}
+				})
+			);
 
 		if (settings.encrypted && settings.repoId) {
 			const store = getPasswordStore(this.app);

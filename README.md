@@ -10,6 +10,7 @@ Originally forked from [conql/obsidian-seafile](https://github.com/conql/obsidia
 - **Manual sync**: a "Sync now" button in settings and a "Seafile: Sync now" command (assignable to a hotkey) trigger an immediate sync without waiting for the interval tick.
 - **Conflicted copies**: if the same file changes on two devices between syncs, the newer version is kept and the older one is saved alongside it as a conflicted copy instead of being silently discarded.
 - **Login-expiry recovery**: an expired/revoked auth token stops sync with a clear notice instead of retrying forever.
+- **Portable repo config**: "Export" in settings writes a `.seasync` file to the vault with the server URL and repo (no credentials). A new device/vault with that file present has the server and repo pre-filled the first time you open settings -- you still need to log in (and enter the repo passphrase, for encrypted repos).
 
 ## Features
 

@@ -3,6 +3,7 @@ import * as IgnoreParser from "gitignore-parser";
 import { DEFAULT_IGNORE, initConfig, PLUGIN_DIR } from "./config";
 import { RepoCrypto } from "./crypto";
 import { getPasswordStore } from "./password_store";
+import { readRepoConfigFile, REPO_CONFIG_FILENAME } from "./repo_config";
 import Server from "./server";
 import { DEFAULT_SETTINGS, type SeafileSettings } from "./settings";
 import { SyncController } from "./sync/controller";
@@ -20,6 +21,7 @@ export default class SeafilePlugin extends Plugin {
 
 	async onload(): Promise<void> {
 		this.settings = await this.loadSettings();
+		await this.adoptRepoConfigFileIfFresh();
 		this.server = new Server(this.settings, this);
 		initConfig(this.app, this.server, this.manifest.id);
 
@@ -81,6 +83,30 @@ export default class SeafilePlugin extends Plugin {
 			// otherwise Obsidian shows "loading" until the user types the password.
 			void this.enableSync();
 		}
+	}
+
+	// If this device/vault has never been configured (no host/repo/login yet),
+	// and a .seasync file is sitting in the vault (copied over from another
+	// device, or restored from an earlier export), adopt its server+repo
+	// pointer so the user only has to log in rather than re-enter everything.
+	// Never overwrites an already-configured setup.
+	private async adoptRepoConfigFileIfFresh(): Promise<void> {
+		if (this.settings.host || this.settings.repoId || this.settings.authToken) return;
+
+		const config = await readRepoConfigFile(this.app.vault.adapter);
+		if (!config) return;
+
+		this.settings.host = config.host;
+		this.settings.repoId = config.repoId;
+		this.settings.repoName = config.repoName;
+		this.settings.encrypted = config.encrypted;
+		this.settings.encVersion = config.encVersion;
+		this.settings.repoSalt = config.repoSalt;
+		this.settings.repoMagic = config.repoMagic;
+		this.settings.randomKey = config.randomKey;
+		await this.saveSettings();
+
+		new Notice(`SeaSync: found ${REPO_CONFIG_FILENAME} -- server and repo pre-filled. Log in from the plugin settings to finish setup.`, 0);
 	}
 
 	private handleAuthFailure(): void {
