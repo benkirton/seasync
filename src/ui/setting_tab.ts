@@ -3,7 +3,8 @@ import type SeafilePlugin from "src/main";
 import { debug } from "src/utils";
 import { server } from "src/config";
 import { getPasswordStore } from "src/password_store";
-import { writeRepoConfigFile, REPO_CONFIG_FILENAME } from "src/repo_config";
+import { buildRepoConfigURI, writeRepoConfigFile, REPO_CONFIG_FILENAME } from "src/repo_config";
+import qrcodeGen from "qrcode-generator";
 import Dialog from "./dialog_modal";
 import LoginModal from "./login_modal";
 import PasswordModal from "./password_modal";
@@ -22,17 +23,19 @@ export class SeafileSettingTab extends PluginSettingTab {
 		let hostText: TextComponent;
 		new Setting(containerEl)
 			.setName("Host")
-			.setDesc("Server URL.")
+			.setDesc("Server URL. \"https://\" is assumed if left off.")
 			.addText(text => {
 				hostText = text;
-				text.setPlaceholder("https://example.com");
+				text.setPlaceholder("example.com");
 				text.setValue(settings.host);
 			})
 			.addButton(button => button
 				.setButtonText("Save")
 				.onClick(async () => {
 					try {
-						const url = new URL(hostText.getValue());
+						const raw = hostText.getValue().trim();
+						const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`;
+						const url = new URL(withScheme);
 						if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("Invalid protocol");
 						settings.host = url.origin;
 						await this.plugin.saveSettings();
@@ -46,7 +49,7 @@ export class SeafileSettingTab extends PluginSettingTab {
 
 		// Declared here (before the Account/login UI below) so a successful
 		// login can auto-complete repo binding when settings.repoId was already
-		// pre-filled from a .seasync file, without the user having to open
+		// pre-filled from a seasync.json file, without the user having to open
 		// RepoModal and browse. Assigned once the Repository Setting row below
 		// is actually created; safe because bindRepo is only ever invoked from
 		// async callbacks that run after display() has finished executing.
@@ -142,7 +145,7 @@ export class SeafileSettingTab extends PluginSettingTab {
 							accountButton.setButtonText("Log out");
 							accountSetting.setDesc(account);
 
-							// A .seasync file already pre-filled which repo to use --
+							// A seasync.json file already pre-filled which repo to use --
 							// finish binding it now instead of making the user browse
 							// and re-pick it from RepoModal.
 							if (settings.repoId && !settings.repoToken) {
@@ -210,6 +213,49 @@ export class SeafileSettingTab extends PluginSettingTab {
 					}
 				})
 			);
+
+		let qrButton: ButtonComponent;
+		new Setting(containerEl)
+			.setName("Setup link")
+			.setDesc("Same info as the repo config file, as an obsidian:// link -- scan the QR code (or open the link) on another device to pre-fill the server and repo. No credentials; login is still required.")
+			.addButton(button => button
+				.setButtonText("Copy link")
+				.onClick(async () => {
+					if (!settings.repoId) {
+						new Notice("Choose a repository first");
+						return;
+					}
+					await navigator.clipboard.writeText(buildRepoConfigURI(settings));
+					new Notice("Setup link copied");
+				})
+			)
+			.addButton(button => {
+				qrButton = button;
+				button.setButtonText("Show QR code")
+					.onClick(() => {
+						if (!settings.repoId) {
+							new Notice("Choose a repository first");
+							return;
+						}
+						const showing = qrContainer.style.display !== "none";
+						if (showing) {
+							qrContainer.style.display = "none";
+							qrButton.setButtonText("Show QR code");
+							return;
+						}
+						qrContainer.empty();
+						const qr = qrcodeGen(0, "M");
+						qr.addData(buildRepoConfigURI(settings));
+						qr.make();
+						qrContainer.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+						qrContainer.style.display = "";
+						qrButton.setButtonText("Hide QR code");
+					});
+			});
+
+		const qrContainer = containerEl.createDiv();
+		qrContainer.style.display = "none";
+		qrContainer.style.padding = "0.5em 0";
 
 		if (settings.encrypted && settings.repoId) {
 			const store = getPasswordStore(this.app);

@@ -3,7 +3,7 @@ import * as IgnoreParser from "gitignore-parser";
 import { DEFAULT_IGNORE, initConfig, PLUGIN_DIR } from "./config";
 import { RepoCrypto } from "./crypto";
 import { getPasswordStore } from "./password_store";
-import { readRepoConfigFile, REPO_CONFIG_FILENAME } from "./repo_config";
+import { parseRepoConfigURI, readRepoConfigFile, REPO_CONFIG_FILENAME, type RepoConfigFile, URI_ACTION } from "./repo_config";
 import Server from "./server";
 import { DEFAULT_SETTINGS, type SeafileSettings } from "./settings";
 import { SyncController } from "./sync/controller";
@@ -22,6 +22,9 @@ export default class SeafilePlugin extends Plugin {
 	async onload(): Promise<void> {
 		this.settings = await this.loadSettings();
 		await this.adoptRepoConfigFileIfFresh();
+		this.registerObsidianProtocolHandler(URI_ACTION, (params) => {
+			void this.adoptRepoConfigFromURI(params);
+		});
 		this.server = new Server(this.settings, this);
 		initConfig(this.app, this.server, this.manifest.id);
 
@@ -86,16 +89,43 @@ export default class SeafilePlugin extends Plugin {
 	}
 
 	// If this device/vault has never been configured (no host/repo/login yet),
-	// and a .seasync file is sitting in the vault (copied over from another
+	// and a repo config file is sitting in the vault (copied over from another
 	// device, or restored from an earlier export), adopt its server+repo
 	// pointer so the user only has to log in rather than re-enter everything.
 	// Never overwrites an already-configured setup.
 	private async adoptRepoConfigFileIfFresh(): Promise<void> {
-		if (this.settings.host || this.settings.repoId || this.settings.authToken) return;
+		if (!this.isUnconfigured()) return;
 
 		const config = await readRepoConfigFile(this.app.vault.adapter);
 		if (!config) return;
 
+		await this.applyRepoConfig(config);
+		new Notice(`SeaSync: found ${REPO_CONFIG_FILENAME} -- server and repo pre-filled. Log in from the plugin settings to finish setup.`, 0);
+	}
+
+	// Handles obsidian://seasync?d=... links (e.g. scanned from a QR code
+	// shown in another vault's settings). Same non-secret fields as the
+	// exported file, delivered without needing the vault's files to sync.
+	private async adoptRepoConfigFromURI(params: Record<string, string>): Promise<void> {
+		const config = parseRepoConfigURI(params);
+		if (!config) {
+			new Notice("SeaSync: setup link is invalid or corrupt.");
+			return;
+		}
+		if (!this.isUnconfigured()) {
+			new Notice("SeaSync: this vault is already configured -- ignoring setup link.");
+			return;
+		}
+
+		await this.applyRepoConfig(config);
+		new Notice("SeaSync: server and repo pre-filled from setup link. Log in from the plugin settings to finish setup.", 0);
+	}
+
+	private isUnconfigured(): boolean {
+		return !this.settings.host && !this.settings.repoId && !this.settings.authToken;
+	}
+
+	private async applyRepoConfig(config: RepoConfigFile): Promise<void> {
 		this.settings.host = config.host;
 		this.settings.repoId = config.repoId;
 		this.settings.repoName = config.repoName;
@@ -105,8 +135,6 @@ export default class SeafilePlugin extends Plugin {
 		this.settings.repoMagic = config.repoMagic;
 		this.settings.randomKey = config.randomKey;
 		await this.saveSettings();
-
-		new Notice(`SeaSync: found ${REPO_CONFIG_FILENAME} -- server and repo pre-filled. Log in from the plugin settings to finish setup.`, 0);
 	}
 
 	private handleAuthFailure(): void {

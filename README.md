@@ -10,7 +10,9 @@ Originally forked from [conql/obsidian-seafile](https://github.com/conql/obsidia
 - **Manual sync**: a "Sync now" button in settings and a "Seafile: Sync now" command (assignable to a hotkey) trigger an immediate sync without waiting for the interval tick.
 - **Conflicted copies**: if the same file changes on two devices between syncs, the newer version is kept and the older one is saved alongside it as a conflicted copy instead of being silently discarded.
 - **Login-expiry recovery**: an expired/revoked auth token stops sync with a clear notice instead of retrying forever.
-- **Portable repo config**: "Export" in settings writes a `.seasync` file to the vault with the server URL and repo (no credentials). A new device/vault with that file present has the server and repo pre-filled the first time you open settings -- you still need to log in (and enter the repo passphrase, for encrypted repos).
+- **Portable repo config**: "Export" in settings writes a `seasync.json` file to the vault root with the server URL and repo (no credentials). A new device/vault with that file present has the server and repo pre-filled the first time you open settings -- you still need to log in (and enter the repo passphrase, for encrypted repos).
+- **Setup link / QR code**: same non-secret info as the exported file, as an `obsidian://seasync?...` link -- "Copy link" or "Show QR code" in settings. Scanning it (or opening the link) on an unconfigured device/vault pre-fills the server and repo without needing the vault's files to sync first.
+- **Other plugins' data stays local**: sync only touches `.obsidian`'s shared settings (themes, snippets, hotkeys); other plugins' folders under `.obsidian/plugins/` (API keys, BRAT's tracked-beta list, etc.) are never synced.
 
 ## Features
 

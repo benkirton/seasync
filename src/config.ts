@@ -19,9 +19,13 @@ export function initConfig(app_: App, server_: Server, pluginId: string) {
 	SYNC_DATA_PATH = PLUGIN_DIR + "/" + "sync_data";
 	HEAD_COMMIT_PATH = PLUGIN_DIR + "/" + "head_commit";
 
+	// Other installed plugins' folders hold local, per-install state -- API
+	// keys/tokens, device-specific caches, BRAT's tracked-beta-plugin list --
+	// that should never leave the device it was set up on. Only the shared,
+	// non-secret parts of .obsidian (themes, snippets, hotkeys, appearance)
+	// are synced by default.
 	DEFAULT_IGNORE = `
-${app.vault.configDir}/plugins/${pluginId}
-${app.vault.configDir}/plugins/hot-reload
+${app.vault.configDir}/plugins
 
 ${app.vault.configDir}/*.json
 `;
