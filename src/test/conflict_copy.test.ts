@@ -1,21 +1,28 @@
 import { describe, expect, test } from "bun:test";
-import { buildConflictedCopyPath } from "../utils";
+import { buildConflictPath, conflictBatchStamp } from "../utils";
 
-describe("buildConflictedCopyPath", () => {
-	const when = new Date("2026-07-31T14:35:02.000Z");
+describe("conflictBatchStamp", () => {
+	test("is filesystem-safe (no colons or dots)", () => {
+		const stamp = conflictBatchStamp(new Date("2026-07-31T14:35:02.000Z"));
+		expect(stamp).toBe("2026-07-31T14-35-02-000Z");
+	});
+});
 
-	test("keeps directory and extension", () => {
-		expect(buildConflictedCopyPath("/notes/todo.md", when))
-			.toBe("/notes/todo (conflicted copy 2026-07-31T14-35-02-000Z).md");
+describe("buildConflictPath", () => {
+	const stamp = "2026-07-31T14-35-02-000Z";
+
+	test("nests the original relative path under conflicts/<stamp>/", () => {
+		expect(buildConflictPath("/notes/todo.md", stamp))
+			.toBe("conflicts/2026-07-31T14-35-02-000Z/notes/todo.md");
 	});
 
-	test("handles a path with no directory", () => {
-		expect(buildConflictedCopyPath("todo.md", when))
-			.toBe("todo (conflicted copy 2026-07-31T14-35-02-000Z).md");
+	test("handles a path with no leading slash", () => {
+		expect(buildConflictPath("todo.md", stamp))
+			.toBe("conflicts/2026-07-31T14-35-02-000Z/todo.md");
 	});
 
-	test("handles a path with no extension", () => {
-		expect(buildConflictedCopyPath("notes/README", when))
-			.toBe("notes/README (conflicted copy 2026-07-31T14-35-02-000Z)");
+	test("handles a nested path with no extension", () => {
+		expect(buildConflictPath("notes/README", stamp))
+			.toBe("conflicts/2026-07-31T14-35-02-000Z/notes/README");
 	});
 });

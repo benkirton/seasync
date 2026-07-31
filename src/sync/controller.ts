@@ -50,6 +50,20 @@ export class SyncController {
 		this.ignore = IgnoreParser.compile(DEFAULT_IGNORE + "\n" + pattern);
 	}
 
+	// True if this vault has synced before (has real sync_data/sync_dlog
+	// content on disk). Must be called before init(), which creates those
+	// files as empty placeholders if they don't exist yet. Used to gate the
+	// "first sync against an already-populated repo" warning.
+	public async hasExistingLocalState (): Promise<boolean> {
+		for (const path of [SYNC_DATA_PATH, SYNC_DLOG_PATH]) {
+			if (await this.adapter.exists(path)) {
+				const data = await this.adapter.read(path);
+				if (data.trim().length > 0) return true;
+			}
+		}
+		return false;
+	}
+
 	// Load sync data
 	async init () {
 		SyncNode.onStateChanged = n => { this.raiseNodeStateChanged(n); };
@@ -117,12 +131,47 @@ export class SyncController {
 		this.onNodeStateChanged?.(node);
 	}
 
+	// True if the local file's content hashes to the same fs id Seafile already
+	// has for `remote` -- i.e. genuinely the same bytes, just with a different
+	// local mtime (the common case when first linking a device to an already-
+	// populated repo). Reuses the same chunk/hash algorithm as a real upload,
+	// so this is authoritative, not a heuristic.
+	private async contentMatches (path: string, remote: FileSeafDirent): Promise<boolean> {
+		try {
+			const [dirent] = await this.computeFileDirent(path, this.settings.account);
+			return dirent.id === remote.id;
+		} catch {
+			return false;
+		}
+	}
+
+	// One conflicts/<timestamp>/ folder per sync cycle, so multiple conflicts
+	// found in the same cycle land together instead of each getting its own
+	// timestamp. Reset in sync().
+	private conflictBatchStamp: string | null = null;
+	private getConflictBatchStamp (): string {
+		if (!this.conflictBatchStamp) this.conflictBatchStamp = utils.conflictBatchStamp();
+		return this.conflictBatchStamp;
+	}
+
+	private async ensureLocalDir (dir: string): Promise<void> {
+		if (!dir) return;
+		let cur = "";
+		for (const part of dir.split("/").filter(Boolean)) {
+			cur = cur ? `${cur}/${part}` : part;
+			if (!(await this.adapter.exists(cur))) {
+				try { await this.adapter.mkdir(cur); } catch { /* created concurrently, ignore */ }
+			}
+		}
+	}
+
 	// Preserve the local side of a conflict before it gets overwritten by the
-	// remote download. The copy is a brand new, untracked local file, so the
-	// normal fastList-based scan picks it up as a plain local addition on the
-	// next sync cycle and uploads it like anything else.
+	// remote download. The copy is a brand new, untracked local file under
+	// conflicts/, so the normal fastList-based scan picks it up as a plain
+	// local addition on the next sync cycle and uploads it like anything else.
 	private async saveLocalConflictCopy (path: string): Promise<void> {
-		const conflictPath = utils.buildConflictedCopyPath(path);
+		const conflictPath = utils.buildConflictPath(path, this.getConflictBatchStamp());
+		await this.ensureLocalDir(Path.dirname(conflictPath));
 		await this.adapter.copy(path, conflictPath);
 	}
 
@@ -131,7 +180,8 @@ export class SyncController {
 	// mobile append dance in downloadFile() -- conflicts are rare, so simplicity
 	// wins over streaming here.
 	private async saveRemoteConflictCopy (path: string, remote: FileSeafDirent): Promise<void> {
-		const conflictPath = utils.buildConflictedCopyPath(path);
+		const conflictPath = utils.buildConflictPath(path, this.getConflictBatchStamp());
+		await this.ensureLocalDir(Path.dirname(conflictPath));
 		if (remote.id === ZeroFs) {
 			await this.adapter.write(conflictPath, "", { mtime: remote.mtime * 1000 });
 			return;
@@ -208,6 +258,20 @@ export class SyncController {
 		// Neither is a file
 		else if (local?.type !== "file" && remote?.mode !== MODE_FILE) {
 			target = "merge";
+		}
+		// Last chance before declaring a real conflict: no shared history (e.g.
+		// first-ever sync against an already-populated remote from another
+		// device), but the content is actually identical -- just hashed
+		// differently-timestamped local file against remote. Cheap size check
+		// first; only hash on a size match, since a real conflict almost always
+		// differs in size anyway.
+		else if (
+			local?.type === "file" && remote?.mode === MODE_FILE &&
+	        local.size === remote.size && await this.contentMatches(path, remote)
+		) {
+			await node.setPrevAsync(remote, false);
+			node.state = { type: "sync" };
+			return;
 		}
 		// Conflict:
 		// One is a file
@@ -579,6 +643,7 @@ export class SyncController {
 
 	async sync () {
 		this.status = { type: "busy", message: "fetch" };
+		this.conflictBatchStamp = null;
 		const changes: NodeChange[] = [];
 		const remoteHead = await server.getHeadCommitId();
 		const remoteRoot = await server.getCommitRoot(remoteHead);

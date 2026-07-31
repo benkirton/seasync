@@ -241,19 +241,18 @@ export function concatTypedArrays(a: Uint8Array<ArrayBuffer>, b: Uint8Array<Arra
 	return result;
 }
 
-// Name for the losing side of a sync conflict, preserved instead of silently
-// discarded. Mirrors the "(conflicted copy ...)" convention used by Dropbox/
-// iCloud Drive so it reads as familiar rather than as plugin debris.
-export function buildConflictedCopyPath(path: string, when: Date = new Date()): string {
-	const slash = path.lastIndexOf("/");
-	const dir = slash === -1 ? "" : path.slice(0, slash);
-	const filename = slash === -1 ? path : path.slice(slash + 1);
-	const dot = filename.lastIndexOf(".");
-	const base = dot > 0 ? filename.slice(0, dot) : filename;
-	const ext = dot > 0 ? filename.slice(dot) : "";
-	const stamp = when.toISOString().replace(/[:.]/g, "-");
-	const name = `${base} (conflicted copy ${stamp})${ext}`;
-	return dir ? `${dir}/${name}` : name;
+// Path for the losing side of a sync conflict, preserved instead of silently
+// discarded. Mirrors the original vault-relative path under conflicts/<batch
+// timestamp>/ instead of littering a "(conflicted copy)" file next to the
+// original -- one dated folder per sync cycle, easy to find and bulk-delete.
+export function buildConflictPath(path: string, batchStamp: string): string {
+	const clean = path.replace(/^\/+/, "");
+	return `conflicts/${batchStamp}/${clean}`;
+}
+
+// Filesystem-safe timestamp for a conflicts/<batch stamp>/ folder name.
+export function conflictBatchStamp(when: Date = new Date()): string {
+	return when.toISOString().replace(/[:.]/g, "-");
 }
 
 export function splitFirstSlash(path: string): [string, string] {

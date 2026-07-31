@@ -6,10 +6,11 @@ import { getPasswordStore } from "./password_store";
 import Server from "./server";
 import { DEFAULT_SETTINGS, type SeafileSettings } from "./settings";
 import { SyncController } from "./sync/controller";
+import Dialog from "./ui/dialog_modal";
 import { Explorer } from "./ui/explorer";
 import PasswordModal from "./ui/password_modal";
 import { SeafileSettingTab } from "./ui/setting_tab";
-import { debug, disableDebugConsole } from "./utils";
+import { debug, disableDebugConsole, fastList } from "./utils";
 
 export default class SeafilePlugin extends Plugin {
 	settings: SeafileSettings;
@@ -117,6 +118,13 @@ export default class SeafilePlugin extends Plugin {
 		// enables sync manually from settings.
 		await this.whenLayoutReady();
 
+		if (!(await this.confirmFirstSyncIfNeeded())) {
+			this.settings.enableSync = false;
+			await this.saveSettings();
+			new Notice("Sync not started.");
+			return;
+		}
+
 		await this.sync.init();
 		this.sync.startSync();
 	}
@@ -124,6 +132,41 @@ export default class SeafilePlugin extends Plugin {
 	private async whenLayoutReady(): Promise<void> {
 		await new Promise<void>((resolve) => {
 			this.app.workspace.onLayoutReady(() => { resolve(); });
+		});
+	}
+
+	// Before the very first sync this vault has ever done, check whether both
+	// the local vault and the remote repo already have files. If so this is
+	// two pre-existing note collections being merged, not a plain "download an
+	// empty vault" or "upload a fresh repo" -- warn before proceeding, since
+	// mismatched content lands in conflicts/ rather than a straight merge.
+	private async confirmFirstSyncIfNeeded(): Promise<boolean> {
+		if (await this.sync.hasExistingLocalState()) return true;
+
+		const localPopulated = (await fastList("")).some(name => !name.startsWith("."));
+		if (!localPopulated) return true;
+
+		let remotePopulated = false;
+		try {
+			remotePopulated = (await this.server.getDirInfo("", false)).length > 0;
+		} catch (e) {
+			debug.warn("Could not check remote repo contents before first sync", e);
+		}
+		if (!remotePopulated) return true;
+
+		return await new Promise<boolean>((resolve) => {
+			new Dialog(
+				this.app,
+				"First sync: both sides already have files",
+				"This vault already has notes, and the remote Seafile repo already has files too "
+				+ "-- this looks like two separate note collections being merged for the first time.\n\n"
+				+ "Files that only exist on one side will be copied to the other. Files with the same "
+				+ "path but different content will keep the newer version and save the older one under "
+				+ "a \"conflicts\" folder.\n\n"
+				+ "If these are actually two unrelated repos, cancel and double-check before continuing.",
+				() => resolve(true),
+				() => resolve(false)
+			).open();
 		});
 	}
 
