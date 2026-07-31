@@ -6,7 +6,7 @@ import { debug } from "src/utils";
 export type LoginCallback = (account: string, token: string, deviceName: string, deviceId: string) => void | Promise<void>;
 
 export default class LoginModal extends Modal {
-	private deviceName: string = "seasync";
+	private deviceName: string = "SeaSync";
 	private otpToken: string = "";
 	private otpTextComponent: TextComponent | null = null;
 	private mfaRequired: boolean = false;

@@ -28,7 +28,7 @@ export const DEFAULT_SETTINGS: SeafileSettings = {
 	repoName: "",
 	repoId: "",
 	repoToken: "",
-	deviceName: "seasync",
+	deviceName: "SeaSync",
 	deviceId: "",
 	interval: 30000,
 	ignore: "",

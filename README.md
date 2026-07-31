@@ -1,8 +1,8 @@
-# Seasync
+# SeaSync
 
 An [Obsidian](https://obsidian.md/) plugin for synchronizing notes across devices using [Seafile](https://www.seafile.com/), an open-source, self-hosted file sync and share solution.
 
-Originally forked from [conql/obsidian-seafile](https://github.com/conql/obsidian-seafile), continued as `obsidian-seafile-continued` by [@ryanravn](https://github.com/ryanravn), and now developed here as **Seasync**.
+Originally forked from [conql/obsidian-seafile](https://github.com/conql/obsidian-seafile), continued as `obsidian-seafile-continued` by [@ryanravn](https://github.com/ryanravn), and now developed here as **SeaSync**.
 
 ## What's different in this fork
 
@@ -24,7 +24,7 @@ Not (yet) in the Community Plugins store. Install via [BRAT](https://github.com/
 
 1. Install the "BRAT" community plugin from Obsidian's plugin browser.
 2. In BRAT's settings, "Add beta plugin", enter `benkirton/seasync`.
-3. Enable "Seasync" in Community plugins.
+3. Enable "SeaSync" in Community plugins.
 
 BRAT will track new releases of this repo automatically.
 
@@ -67,4 +67,4 @@ Open a [GitHub issue](https://github.com/benkirton/seasync/issues) for bugs, fea
 
 ## Credits
 
-Original plugin by [@conql](https://github.com/conql). Community continuation by [@ryanravn](https://github.com/ryanravn). This fork (Seasync) maintained by [@benkirton](https://github.com/benkirton).
+Original plugin by [@conql](https://github.com/conql). Community continuation by [@ryanravn](https://github.com/ryanravn). This fork (SeaSync) maintained by [@benkirton](https://github.com/benkirton).
