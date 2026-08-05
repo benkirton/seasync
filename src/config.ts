@@ -25,14 +25,30 @@ export function initConfig(app_: App, server_: Server, pluginId: string) {
 	// sync scans.
 	DOWNLOAD_TMP_DIR = PLUGIN_DIR + "/" + "tmp";
 
-	// Other installed plugins' folders hold local, per-install state -- API
-	// keys/tokens, device-specific caches, BRAT's tracked-beta-plugin list --
-	// that should never leave the device it was set up on. Only the shared,
-	// non-secret parts of .obsidian (themes, snippets, hotkeys, appearance)
-	// are synced by default.
+	// What syncs from .obsidian: themes/, snippets/, hotkeys.json and
+	// appearance.json. Those are device-agnostic and tedious to redo by hand
+	// (especially on mobile), and Obsidian Sync has them on by default too.
+	//
+	// What doesn't, and why:
+	// - .obsidian/plugins/ -- plugin folders hold per-install state: API keys
+	//   and tokens, device-specific caches, BRAT's tracked-beta-plugin list.
+	//   None of that should leave the device it was set up on. Note Obsidian
+	//   gives each plugin a single data.json for its whole config, so there is
+	//   no way to sync a plugin's ordinary settings without its secrets.
+	// - workspace.json / workspace-mobile.json -- per-device pane layout.
+	// - community-plugins.json / core-plugins.json -- the enabled-plugin
+	//   lists, meaningless without the plugins themselves.
+	//
+	// Careful: pull() prunes the walk at any denied *folder* and never descends
+	// into it, so a "!" negation under .obsidian/plugins can never take effect,
+	// however plausible it looks against the ignore matcher alone. Negations on
+	// denied *files* (as below) do work, since .obsidian itself is still walked.
+	// See ignore_walk.test.ts.
 	DEFAULT_IGNORE = `
 ${app.vault.configDir}/plugins
 
 ${app.vault.configDir}/*.json
+!${app.vault.configDir}/hotkeys.json
+!${app.vault.configDir}/appearance.json
 `;
 }

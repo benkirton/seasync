@@ -12,7 +12,9 @@ Originally forked from [conql/obsidian-seafile](https://github.com/conql/obsidia
 - **Login-expiry recovery**: an expired/revoked auth token stops sync with a clear notice instead of retrying forever.
 - **Portable repo config**: "Export" in settings writes a `seasync.json` file to the vault root with the server URL and repo (no credentials). A new device/vault with that file present has the server and repo pre-filled the first time you open settings -- you still need to log in (and enter the repo passphrase, for encrypted repos).
 - **Setup link / QR code**: same non-secret info as the exported file, as an `obsidian://seasync?...` link -- "Copy link" or "Show QR code" in settings. Scanning it (or opening the link) on an unconfigured device/vault pre-fills the server and repo without needing the vault's files to sync first.
-- **Other plugins' data stays local**: sync only touches `.obsidian`'s shared settings (themes, snippets, hotkeys); other plugins' folders under `.obsidian/plugins/` (API keys, BRAT's tracked-beta list, etc.) are never synced.
+- **Selective `.obsidian` sync**: `themes/`, `snippets/`, `hotkeys.json` and `appearance.json` sync, so the fiddly settings follow you between devices (Obsidian Sync has these on by default too). Everything else is excluded -- `workspace.json` is per-device layout, and all of `.obsidian/plugins/` is left alone so plugin code, API keys and per-device state (BRAT's tracked-beta list, caches) never leave the device they were set up on. Plugins themselves are not synced; install them on each device as usual.
+
+  Plugin *settings* are not synced either, and that is deliberate: Obsidian gives each plugin a single `data.json` holding its whole config, so any API keys a plugin stores sit in the same file as its ordinary settings. There is no way to sync one without the other.
 
 ## Features
 
