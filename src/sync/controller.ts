@@ -2,7 +2,7 @@ import * as IgnoreParser from "gitignore-parser";
 import { posix as Path } from "path-browserify";
 import { Notice, Platform, type DataAdapter } from "obsidian";
 import { type SeafileSettings } from "src/settings";
-import { DEFAULT_IGNORE, HEAD_COMMIT_PATH, SYNC_DATA_PATH, SYNC_DLOG_PATH, server } from "../config";
+import { DEFAULT_IGNORE, DOWNLOAD_TMP_DIR, HEAD_COMMIT_PATH, SYNC_DATA_PATH, SYNC_DLOG_PATH, server } from "../config";
 import { AuthError, MODE_DIR, MODE_FILE, ZeroFs, type DirSeafDirent, type DirSeafFs, type FileSeafDirent, type FileSeafFs, type SeafDirent, type SeafFs } from "../server";
 import * as utils from "../utils";
 import { debug } from "../utils";
@@ -77,6 +77,8 @@ export class SyncController {
 			}
 		}
 
+		await this.cleanDownloadTmpDir();
+
 		if (this.localHead === undefined) {
 			if (await this.adapter.exists(HEAD_COMMIT_PATH)) {
 				this.localHead = await this.adapter.read(HEAD_COMMIT_PATH);
@@ -86,41 +88,87 @@ export class SyncController {
 		}
 	}
 
+	// Monotonic suffix so concurrent/retried downloads can never collide on a
+	// temp name (fsId alone isn't enough -- the same content can be pulled to
+	// two paths in one cycle).
+	private tmpCounter = 0;
+	private tmpDirReady = false;
+
+	private async ensureTmpDir (): Promise<void> {
+		if (this.tmpDirReady) return;
+		await this.ensureLocalDir(DOWNLOAD_TMP_DIR);
+		this.tmpDirReady = true;
+	}
+
+	// Deletes temp files left behind by a download that was killed mid-flight
+	// (app suspended/terminated on mobile). Safe to call on every startup:
+	// nothing in here is ever needed across sessions.
+	public async cleanDownloadTmpDir (): Promise<void> {
+		try {
+			if (!(await this.adapter.exists(DOWNLOAD_TMP_DIR))) return;
+			const { files } = await this.adapter.list(DOWNLOAD_TMP_DIR);
+			for (const file of files) {
+				try { await this.adapter.remove(file); } catch { /* best effort */ }
+			}
+		} catch (e) {
+			debug.error("Failed to clean download temp dir", e);
+		}
+	}
+
+	// Downloads into DOWNLOAD_TMP_DIR and only renames into place once every
+	// block has landed. An interrupted download therefore leaves the real path
+	// untouched -- either still absent, or still holding the previous complete
+	// version -- so the next pull() re-downloads it cleanly instead of seeing a
+	// partial file it can only classify as a conflict.
 	async downloadFile (path: string, fsId: string, mtime: number) {
 		this.ignoreChange.add(path);
+		await this.ensureTmpDir();
+		const tmpPath = `${DOWNLOAD_TMP_DIR}/dl-${(this.tmpCounter++).toString(36)}`;
 		try {
 			mtime = mtime * 1000;
-			await this.adapter.write(path, "", { mtime });
+			await this.adapter.write(tmpPath, "", { mtime });
 
-			if (fsId == ZeroFs) {
-				return;
-			}
+			if (fsId != ZeroFs) {
+				let nativePath;
+				if (Platform.isMobile) {
+					nativePath = (this.adapter as MobileDataAdapter).getNativePath(tmpPath);
+				}
 
-			let nativePath;
-			if (Platform.isMobile) {
-				nativePath = (this.adapter as MobileDataAdapter).getNativePath(path);
-			}
+				const [, fs] = await server.getFs(fsId);
+				for (const blockId of (fs as FileSeafFs).block_ids) {
+					const block = await server.getBlock(blockId);
+					if (Platform.isDesktop) {
+						await this.adapter.append(tmpPath, new DataView(block) as unknown as string, { mtime });
+					} else {
+						// Hacky way to get the filesystem plugin to append to file when mobile
+						const encoded = await utils.arrayBufferToBase64(block);
+						const capacitor = window.top as unknown as {
+							Capacitor: { Plugins: { Filesystem: { appendFile(options: { path: string; data: string }): Promise<void> } } }
+						};
+						// nativePath is intentionally passed through unchanged to preserve
+						// existing runtime behavior (it is not awaited here).
+						await capacitor.Capacitor.Plugins.Filesystem.appendFile({ path: nativePath as unknown as string, data: encoded });
+					}
+				}
 
-			const [, fs] = await server.getFs(fsId);
-			for (const blockId of (fs as FileSeafFs).block_ids) {
-				const block = await server.getBlock(blockId);
-				if (Platform.isDesktop) {
-					await this.adapter.append(path, new DataView(block) as unknown as string, { mtime });
-				} else {
-					// Hacky way to get the filesystem plugin to append to file when mobile
-					const encoded = await utils.arrayBufferToBase64(block);
-					const capacitor = window.top as unknown as {
-						Capacitor: { Plugins: { Filesystem: { appendFile(options: { path: string; data: string }): Promise<void> } } }
-					};
-					// nativePath is intentionally passed through unchanged to preserve
-					// existing runtime behavior (it is not awaited here).
-					await capacitor.Capacitor.Plugins.Filesystem.appendFile({ path: nativePath as unknown as string, data: encoded });
+				if (Platform.isMobile) {
+					await this.adapter.append(tmpPath, "", { mtime }); // Set mtime
 				}
 			}
 
-			if (Platform.isMobile) {
-				await this.adapter.append(path, "", { mtime }); // Set mtime
+			// Only now is the content complete. rename() overwrites in place on
+			// POSIX; where it won't (mobile), fall back to remove-then-rename --
+			// the two calls are adjacent and purely local, so the window where
+			// the destination is missing is as small as it can be made.
+			try {
+				await this.adapter.rename(tmpPath, path);
+			} catch {
+				if (await this.adapter.exists(path)) await this.adapter.remove(path);
+				await this.adapter.rename(tmpPath, path);
 			}
+		} catch (e) {
+			try { if (await this.adapter.exists(tmpPath)) await this.adapter.remove(tmpPath); } catch { /* best effort */ }
+			throw e;
 		} finally {
 			this.ignoreChange.delete(path);
 		}
